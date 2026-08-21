@@ -532,7 +532,14 @@ input {
   color: var(--text);
   font-family: inherit;
   font-size: inherit;
-  resize: vertical;
+  /* height is driven entirely by JS (see autoResizeEditFields / the
+     'input' listener) to track content the way the normal card's static
+     text just wraps and grows — overflow:hidden keeps no stray scrollbar
+     flashing in the moment before each resize catches up, and resize:none
+     avoids a manual drag-handle fighting the auto-grow on the next
+     keystroke. */
+  overflow: hidden;
+  resize: none;
 }
 
 .edit-word-input {
@@ -546,8 +553,6 @@ input {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
-  flex: 1;
 }
 
 .edit-meaning-row {
@@ -573,6 +578,25 @@ input {
 .edit-example-input {
   font-size: 0.9em;
   color: var(--text-muted);
+}
+
+.edit-add-meaning-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-add-meaning-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .edit-add-card-btn,

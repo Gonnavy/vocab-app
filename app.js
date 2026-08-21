@@ -156,6 +156,23 @@ function createNewWord() {
   });
 }
 
+// Run when edit mode turns off: a "+ 새 뜻 추가" row nobody typed anything
+// into (meaning and example both still blank) is dropped rather than
+// saved as a permanent empty entry. Doesn't touch words with zero
+// meanings to begin with — that's a normal, pre-existing state, not
+// leftover cruft from this session.
+function cleanupBlankMeanings() {
+  let changed = false;
+  for (const w of words) {
+    const kept = w.meanings.filter((m) => (m.meaning || '').trim() || (m.example || '').trim());
+    if (kept.length !== w.meanings.length) {
+      w.meanings = kept;
+      changed = true;
+    }
+  }
+  if (changed) saveWords(words);
+}
+
 function getCategories() {
   const seen = [];
   const set = new Set();
@@ -508,6 +525,30 @@ function render() {
     (ui.exportOpen ? renderExportPanel() : '') +
     (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
     (ui.helpOpen ? renderHelpPanel() : '');
+
+  // Edit fields need their height set from actual rendered content (font
+  // metrics/wrapping aren't known until they're in the DOM), so this can't
+  // happen as part of the HTML string above — it has to run after
+  // insertion. Only matters in edit mode; harmless no-op otherwise since
+  // no .edit-field elements exist.
+  if (ui.editMode) autoResizeEditFields();
+}
+
+// scrollHeight measures the content+padding box, but these fields are
+// box-sizing:border-box (global reset), where the `height` CSS property
+// includes the border too — setting height straight to scrollHeight comes
+// up one border-width short on each edge, clipping the last line by a
+// couple px. Reading the actual border width (rather than hardcoding the
+// CSS's current 1px) keeps this correct if that ever changes.
+function autoResizeField(el) {
+  const cs = getComputedStyle(el);
+  const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + borderY + 'px';
+}
+
+function autoResizeEditFields() {
+  document.querySelectorAll('.edit-field').forEach(autoResizeField);
 }
 
 function renderMobileTopBar() {
@@ -996,10 +1037,13 @@ function renderEditableCard(word, p, index, focused) {
     <button class="card-edit-delete" data-action="edit-delete-word" data-id="${escapeHtml(
       word.id
     )}" aria-label="단어 삭제">×</button>
-    <input type="text" class="edit-field edit-word-input" data-action="edit-word" data-id="${escapeHtml(
+    <textarea class="edit-field edit-word-input" rows="1" data-action="edit-word" data-id="${escapeHtml(
       word.id
-    )}" value="${escapeHtml(word.word)}" placeholder="표제어" />
+    )}" placeholder="표제어">${escapeHtml(word.word)}</textarea>
     <div class="edit-meanings">${meaningsHtml}</div>
+    <button class="edit-add-meaning-btn" data-action="edit-add-meaning" data-id="${escapeHtml(
+      word.id
+    )}">+ 새 뜻 추가</button>
   </div>`;
 }
 
@@ -1555,10 +1599,28 @@ document.getElementById('app').addEventListener('click', (e) => {
 
   const editModeBtn = e.target.closest('[data-action="toggle-edit-mode"]');
   if (editModeBtn) {
+    if (ui.editMode) cleanupBlankMeanings(); // leaving edit mode — drop any "새 뜻 추가" rows nobody filled in
     ui.editMode = !ui.editMode;
     ui.editSelectedIds = new Set();
     ui.focusedIndex = null;
     render();
+    return;
+  }
+
+  const editAddMeaningBtn = e.target.closest('[data-action="edit-add-meaning"]');
+  if (editAddMeaningBtn) {
+    const id = editAddMeaningBtn.getAttribute('data-id');
+    const w = words.find((x) => x.id === id);
+    if (w) {
+      w.meanings.push({ meaning: '', example: '' });
+      saveWords(words);
+      render();
+      const newIndex = w.meanings.length - 1;
+      requestAnimationFrame(() => {
+        const field = document.querySelector(`.edit-meaning-input[data-id="${id}"][data-index="${newIndex}"]`);
+        if (field) field.focus();
+      });
+    }
     return;
   }
 
@@ -1869,6 +1931,16 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   if (!searchInput) return;
   ui.search.query = searchInput.value;
   renderPreservingSearchFocus();
+});
+
+// ---------- edit mode: grow fields with their content as you type ----------
+// Purely a style mutation on the one field being typed into — no render(),
+// so it can safely run on every keystroke without the focus-loss risk that
+// rules out re-rendering here (see the focusout handler below).
+document.getElementById('app').addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.classList || !el.classList.contains('edit-field')) return;
+  autoResizeField(el);
 });
 
 // ---------- edit mode: commit field edits on blur, not per keystroke ----------
