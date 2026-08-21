@@ -10,12 +10,10 @@ const DEFAULT_SETTINGS = {
   darkMode: false,
   font: 'kopub-batang',
   fontSize: 16,
-  bold: false,
   mode: 'memorize', // 'memorize' | 'meaning-test' | 'word-test'
   widthMode: 'contained', // 'contained' | 'full'
   cols: 3, // 1-5
   count: 3, // 1-15, cards per feed page
-  cardWidth: 270, // px, 270-540 (CARD_MIN_WIDTH to 2x)
   cardHeight: 320, // px, 320-640 (CARD_MIN_HEIGHT to 2x)
   toolbarHeight: null, // px, null = auto
   progressWidth: null, // px, null = default (260)

@@ -1,8 +1,7 @@
 :root {
-  /* card-scoped font (font-size/bold controls only affect word-card text) */
+  /* card-scoped font (font-size control only affects word-card text) */
   --card-font-family: 'KoPubWorldBatang', 'Batang', serif;
   --card-font-size: 16px;
-  --card-font-weight: 400;
 
   --bg: #f5f6fb;
   --panel-bg: #ffffff;
@@ -15,6 +14,8 @@
   --success-soft: #e3faf0;
   --important: #cf8a13;
   --important-soft: #fdf0d5;
+  --danger: #e5484d;
+  --danger-soft: #fde8e8;
   --checked-text: #9aa0a8;
   --card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
 }
@@ -31,6 +32,8 @@ body.dark {
   --success-soft: #1c3a30;
   --important: #f2ba3f;
   --important-soft: #453723;
+  --danger: #ff6b6b;
+  --danger-soft: #4a2323;
   --checked-text: #6b7280;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
@@ -464,7 +467,7 @@ input {
   min-width: 0;
   font-family: var(--card-font-family);
   font-size: var(--card-font-size);
-  font-weight: var(--card-font-weight);
+  font-weight: 400;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px;
@@ -485,6 +488,127 @@ input {
   position: relative;
   z-index: 2;
   box-shadow: 0 0 0 3px var(--accent), var(--card-shadow);
+}
+
+/* ---------- edit mode ---------- */
+
+.word-card.editable {
+  position: relative;
+  cursor: default;
+  gap: 10px;
+}
+
+.word-card.edit-selected {
+  border: 2px solid var(--danger);
+  background: var(--danger-soft);
+}
+
+.card-edit-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--danger);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--danger);
+  font-size: 1em;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.card-edit-delete:hover {
+  background: var(--danger-soft);
+}
+
+.edit-field {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  resize: vertical;
+}
+
+.edit-word-input {
+  font-size: 1.3em;
+  font-weight: 800;
+  text-align: center;
+  padding-right: 34px;
+}
+
+.edit-meanings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.edit-meaning-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.edit-meaning-index {
+  flex: 0 0 auto;
+  padding-top: 8px;
+  color: var(--text-muted);
+}
+
+.edit-meaning-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-example-input {
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+.edit-add-card-btn,
+.edit-trash-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  line-height: 1;
+}
+
+.edit-add-card-btn {
+  border: 2px solid var(--success);
+  background: var(--panel-bg);
+  color: var(--success);
+}
+
+.edit-add-card-btn:hover {
+  background: var(--success-soft);
+}
+
+.edit-trash-btn {
+  border: 2px solid var(--danger);
+  background: var(--panel-bg);
+  color: var(--danger);
+  opacity: 0.5;
+}
+
+.edit-trash-btn.has-selection {
+  opacity: 1;
+}
+
+.edit-trash-btn:hover {
+  background: var(--danger-soft);
 }
 
 .card-word {

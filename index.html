@@ -10,10 +10,9 @@
 <link rel="apple-touch-icon" href="icon-192.png" />
 <style>
 :root {
-  /* card-scoped font (font-size/bold controls only affect word-card text) */
+  /* card-scoped font (font-size control only affects word-card text) */
   --card-font-family: 'KoPubWorldBatang', 'Batang', serif;
   --card-font-size: 16px;
-  --card-font-weight: 400;
 
   --bg: #f5f6fb;
   --panel-bg: #ffffff;
@@ -26,6 +25,8 @@
   --success-soft: #e3faf0;
   --important: #cf8a13;
   --important-soft: #fdf0d5;
+  --danger: #e5484d;
+  --danger-soft: #fde8e8;
   --checked-text: #9aa0a8;
   --card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
 }
@@ -42,6 +43,8 @@ body.dark {
   --success-soft: #1c3a30;
   --important: #f2ba3f;
   --important-soft: #453723;
+  --danger: #ff6b6b;
+  --danger-soft: #4a2323;
   --checked-text: #6b7280;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
@@ -475,7 +478,7 @@ input {
   min-width: 0;
   font-family: var(--card-font-family);
   font-size: var(--card-font-size);
-  font-weight: var(--card-font-weight);
+  font-weight: 400;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px;
@@ -496,6 +499,127 @@ input {
   position: relative;
   z-index: 2;
   box-shadow: 0 0 0 3px var(--accent), var(--card-shadow);
+}
+
+/* ---------- edit mode ---------- */
+
+.word-card.editable {
+  position: relative;
+  cursor: default;
+  gap: 10px;
+}
+
+.word-card.edit-selected {
+  border: 2px solid var(--danger);
+  background: var(--danger-soft);
+}
+
+.card-edit-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--danger);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--danger);
+  font-size: 1em;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.card-edit-delete:hover {
+  background: var(--danger-soft);
+}
+
+.edit-field {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  resize: vertical;
+}
+
+.edit-word-input {
+  font-size: 1.3em;
+  font-weight: 800;
+  text-align: center;
+  padding-right: 34px;
+}
+
+.edit-meanings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.edit-meaning-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.edit-meaning-index {
+  flex: 0 0 auto;
+  padding-top: 8px;
+  color: var(--text-muted);
+}
+
+.edit-meaning-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-example-input {
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+.edit-add-card-btn,
+.edit-trash-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  line-height: 1;
+}
+
+.edit-add-card-btn {
+  border: 2px solid var(--success);
+  background: var(--panel-bg);
+  color: var(--success);
+}
+
+.edit-add-card-btn:hover {
+  background: var(--success-soft);
+}
+
+.edit-trash-btn {
+  border: 2px solid var(--danger);
+  background: var(--panel-bg);
+  color: var(--danger);
+  opacity: 0.5;
+}
+
+.edit-trash-btn.has-selection {
+  opacity: 1;
+}
+
+.edit-trash-btn:hover {
+  background: var(--danger-soft);
 }
 
 .card-word {
@@ -1389,12 +1513,10 @@ const DEFAULT_SETTINGS = {
   darkMode: false,
   font: 'kopub-batang',
   fontSize: 16,
-  bold: false,
   mode: 'memorize', // 'memorize' | 'meaning-test' | 'word-test'
   widthMode: 'contained', // 'contained' | 'full'
   cols: 3, // 1-5
   count: 3, // 1-15, cards per feed page
-  cardWidth: 270, // px, 270-540 (CARD_MIN_WIDTH to 2x)
   cardHeight: 320, // px, 320-640 (CARD_MIN_HEIGHT to 2x)
   toolbarHeight: null, // px, null = auto
   progressWidth: null, // px, null = default (260)
@@ -1467,10 +1589,16 @@ function defaultProgressFor(word) {
 // Relies on globals from csv.js and store.js (no bundler / plain <script> includes).
 
 const CARD_GAP = 12;
-const CARD_MIN_WIDTH = 270; // slider floor; also the default card width
-const CARD_MAX_WIDTH = CARD_MIN_WIDTH * 2;
+const CARD_MIN_WIDTH = 270; // floor for the always-on fit-to-width calculation
 const CARD_MIN_HEIGHT = 200; // slider floor
 const CARD_MAX_HEIGHT = CARD_MIN_HEIGHT * 2;
+
+// Card width is no longer a stored preference — it's recomputed every
+// render() from the available width and column count (see render()), so
+// cards always exactly fill the row regardless of viewport size, cols, or
+// count. Kept as a module-level var (not persisted) purely so
+// renderFeedPanel() can read whatever render() just computed.
+let currentCardWidth = CARD_MIN_WIDTH;
 
 let words = loadWords();
 let progress = loadProgress();
@@ -1488,11 +1616,11 @@ const ui = {
   shuffleActive: false,
   shuffledIds: null, // word ids in shuffled order, snapshot of the filtered range at shuffle time
   preShuffleStartIndex: 0, // restored when shuffle is toggled back off
-  fitWidthActive: false,
-  preFitCardWidth: null, // settings.cardWidth snapshot, restored when fit is toggled off
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
   mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
   helpOpen: false,
+  editMode: false,
+  editSelectedIds: new Set(), // word ids marked (via drag) for bulk delete while editing
   search: {
     query: '',
     scope: 'word-meaning', // 'word-meaning' | 'word' | 'meaning'
@@ -1500,7 +1628,7 @@ const ui = {
     memorized: false,
     unmemorized: false,
     important: false,
-    useRegex: false, // interpret query as a regular expression instead of a literal substring
+    useRegex: true, // interpret query as a regular expression instead of a literal substring (default on)
     categories: null, // Set, lazily initialized when advanced search opens
   },
 };
@@ -1510,6 +1638,8 @@ const SEARCH_SCOPE_OPTIONS = [
   { value: 'word', label: '표제어' },
   { value: 'meaning', label: '뜻' },
 ];
+
+const NEW_WORD_CATEGORY = '생성 단어';
 
 resyncProgress(words);
 
@@ -1565,6 +1695,52 @@ function setWords(newWords) {
   deactivateShuffle();
   resetPaging();
   render();
+}
+
+// New-word ids only need to be unique and stable — never regenerated from
+// the (editable) word text — so progress/selection stay attached to the
+// right card even after the user retypes the headword.
+function makeNewWordId() {
+  return 'new::' + Date.now() + '::' + Math.random().toString(36).slice(2, 8);
+}
+
+// If a specific category was the whole reason the feed narrowed down to
+// what's visible, the new word joins it — otherwise (viewing "전체", or a
+// search that could span several categories) there's no single obvious
+// category to drop it in, so it goes to its own NEW_WORD_CATEGORY instead.
+// Either way, the view is switched to exactly that category afterward so
+// the blank card is immediately visible and ready to type into.
+function createNewWord() {
+  const useSpecificCategory = !isSearchActive() && Boolean(ui.activeCategory);
+  const category = useSpecificCategory ? ui.activeCategory : NEW_WORD_CATEGORY;
+  const id = makeNewWordId();
+  const newWord = { id, category, word: '', meanings: [{ meaning: '', example: '' }], importedProgress: null };
+  words.push(newWord);
+  progress[id] = defaultProgressFor(newWord);
+  saveWords(words);
+  saveProgress(progress);
+
+  if (!useSpecificCategory) {
+    ui.search.query = '';
+    ui.search.memorized = false;
+    ui.search.unmemorized = false;
+    ui.search.important = false;
+    ui.search.categories = null;
+    ui.activeCategory = category;
+    ui.filterMode = null;
+    deactivateShuffle();
+  }
+  resetPaging();
+
+  const displayList = getDisplayWords();
+  const ordinal = displayList.findIndex((w) => w.id === id) + 1;
+  if (ordinal > 0) jumpToWordOrdinal(ordinal);
+  else render();
+
+  requestAnimationFrame(() => {
+    const input = document.querySelector(`.edit-word-input[data-id="${id}"]`);
+    if (input) input.focus();
+  });
 }
 
 function getCategories() {
@@ -1647,11 +1823,12 @@ function getFilteredWords() {
 }
 
 // True once any advanced filter departs from its default (all categories,
-// no memorized/important checkbox) — used both to decide whether a search
-// is "active" with an empty query, and to badge the advanced-search button.
+// no memorized/important checkbox, regex mode on) — used both to decide
+// whether a search is "active" with an empty query, and to badge the
+// advanced-search button.
 function isSearchAdvancedActive() {
   const s = ui.search;
-  if (s.memorized || s.unmemorized || s.important || s.useRegex) return true;
+  if (s.memorized || s.unmemorized || s.important || !s.useRegex) return true;
   if (s.categories) {
     const allCats = getCategories();
     if (s.categories.size !== allCats.length) return true;
@@ -1694,11 +1871,11 @@ function matchesSearchScope(word, scope, matcher) {
 // category-tab/shuffle-driven display, which this bypasses entirely while
 // a search is active (see getDisplayWords below).
 //
-// Regex mode is opt-in (the "정규식 사용" advanced-search toggle) precisely
-// so that plain search stays free of surprises — with it off, "*", ".",
-// "\" etc. in a query are just literal characters to look for, never
-// special syntax. An invalid pattern (regex mode only) matches nothing
-// rather than throwing or silently falling back to a literal search.
+// Regex mode is on by default; "정규식 미사용" in advanced search opts back
+// out to plain substring matching — with it off, "*", ".", "\" etc. in a
+// query are just literal characters to look for, never special syntax. An
+// invalid pattern (regex mode only) matches nothing rather than throwing or
+// silently falling back to a literal search.
 function getSearchResults() {
   const s = ui.search;
   const query = s.query.trim();
@@ -1854,7 +2031,6 @@ function render() {
   const fontDef = FONT_OPTIONS.find((f) => f.value === settings.font) || FONT_OPTIONS[0];
   document.documentElement.style.setProperty('--card-font-family', fontDef.stack);
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
-  document.documentElement.style.setProperty('--card-font-weight', settings.bold ? '700' : '400');
 
   const filtered = getDisplayWords();
   clampStartIndex(filtered.length);
@@ -1866,38 +2042,46 @@ function render() {
   const progressW = settings.progressCollapsed ? 40 : settings.progressWidth || 260;
   const app = document.getElementById('app');
 
-  // #app is sized to whichever is larger: the classic ~1200px default
-  // (kept for readability at typical column counts) or whatever `cols`
-  // cards actually need at the current card width (so more columns, or a
-  // wider manual card-width setting, can widen the layout instead of
-  // squeezing cards below a usable width) — capped at the viewport so it
-  // never forces page-level horizontal scroll, and centered via
-  // margin:auto. Setting an explicit width here (rather than relying on
-  // CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing quirks
-  // that didn't reliably propagate the card grid's width up through
+  // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
+  // initial containing block and in practice doesn't subtract the vertical
+  // scrollbar's own width, so a vw-based cap can still let the app render a
+  // few px wider than what's actually available, which is exactly enough
+  // to trigger a horizontal scrollbar. clientWidth is a real post-layout
+  // measurement that already excludes the scrollbar — freshly read every
+  // render, so it also reacts correctly when a `count`/`cols` change adds
+  // or removes enough page height to toggle the scrollbar on or off.
+  const viewportCap = document.documentElement.clientWidth - 24;
+
+  // Card width is always computed to exactly fill the row — no manual
+  // width slider or fit-toggle anymore (see the currentCardWidth note up
+  // top). This solves directly for the card width that makes the cards
+  // fill the target width, using the same chrome terms (#app/feed-panel
+  // padding, main gaps+handle, progress panel) the width is built from
+  // below, so there's no measure-the-rendered-DOM-then-fix-it-up step —
+  // it's correct in one pass.
+  // +4px: measured empirically — the .cards padding/negative-margin trick
+  // (for focus-ring room) resolves a couple px tighter in practice than
+  // the arithmetic here predicts, and without this slack the grid can end
+  // up ~2px wider than its container and trigger a horizontal scrollbar.
+  const nonCardsChrome = 16 * 2 + 16 + 10 + 16 + progressW + 16 * 2; // feed-panel pad + main gaps/handle + progress panel + #app pad
+  const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
+  const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
+  currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
+
+  // #app itself: in 'full' mode it's just 100% via CSS; in 'contained'
+  // mode it's sized to exactly wrap the now-computed cards, capped at the
+  // viewport so it never forces page-level horizontal scroll, and centered
+  // via margin:auto. Setting an explicit width here (rather than relying
+  // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
+  // quirks that didn't reliably propagate the card grid's width up through
   // .main / .feed-nav in testing — with a definite width the grid's own
   // tracks size normally.
   if (settings.widthMode === 'full') {
     app.style.width = '';
   } else {
-    // +4px: measured empirically — the .cards padding/negative-margin trick
-    // (for focus-ring room) resolves a couple px tighter in practice than
-    // the arithmetic below predicts, and without slack from the 1200px
-    // floor to absorb it, the grid can end up ~2px wider than its
-    // container and trigger a horizontal scrollbar.
-    const cardsWidth = settings.cols * settings.cardWidth + (settings.cols - 1) * CARD_GAP + 4;
-    const feedPanelWidth = cardsWidth + 16 * 2; // feed-panel padding
-    const mainWidth = feedPanelWidth + 16 + 10 + 16 + progressW; // main gaps + handle
-    const appWidth = mainWidth + 16 * 2; // #app padding
-    const targetWidth = Math.max(appWidth, 1200);
-    // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
-    // initial containing block and in practice doesn't subtract the
-    // vertical scrollbar's own width, so a vw-based cap can still let the
-    // app render a few px wider than what's actually available, which is
-    // exactly enough to trigger a horizontal scrollbar. clientWidth is a
-    // real post-layout measurement that already excludes the scrollbar.
-    const viewportCap = document.documentElement.clientWidth - 24;
-    app.style.width = Math.min(targetWidth, viewportCap) + 'px';
+    const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
+    const appWidth = cardsWidth + nonCardsChrome;
+    app.style.width = Math.min(appWidth, viewportCap) + 'px';
   }
   app.innerHTML =
     renderMobileTopBar() +
@@ -2070,7 +2254,6 @@ function renderMobileSettingsView() {
         <select data-action="select-font">${fontOptionsHtml}</select>
       </label>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-      <button class="chip-btn ${settings.bold ? 'active' : ''}" data-action="toggle-bold">굵게</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">레이아웃</div>
@@ -2084,9 +2267,11 @@ function renderMobileSettingsView() {
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 가로', settings.cardWidth, CARD_MIN_WIDTH, Math.max(CARD_MAX_WIDTH, settings.cardWidth), 'card-width-slider')}
       ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
-      <button class="chip-btn ${ui.fitWidthActive ? 'active' : ''}" data-action="fit-card-width">가로 맞춤</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">단어 편집</div>
+      <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
     </div>
   `;
 }
@@ -2146,7 +2331,6 @@ function renderToolbar() {
         <select data-action="select-font">${fontOptionsHtml}</select>
       </label>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-      <button class="chip-btn ${settings.bold ? 'active' : ''}" data-action="toggle-bold">굵게</button>
       <label class="opt">
         레이아웃
         <select data-action="select-width">${widthOptionsHtml}</select>
@@ -2157,9 +2341,8 @@ function renderToolbar() {
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 가로', settings.cardWidth, CARD_MIN_WIDTH, Math.max(CARD_MAX_WIDTH, settings.cardWidth), 'card-width-slider')}
       ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
-      <button class="chip-btn ${ui.fitWidthActive ? 'active' : ''}" data-action="fit-card-width">가로 맞춤</button>
+      <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
       <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">▴ 접기</button>
     </div>
     ${renderResizeHandle('resize-toolbar', 'h')}
@@ -2214,6 +2397,14 @@ function renderFeedPanel(filtered, windowWords) {
       <div class="feed-header">단어장 피드</div>
       <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
       <span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>
+      ${
+        ui.editMode
+          ? `<button class="edit-add-card-btn" data-action="edit-add-word" aria-label="단어 추가">+</button>
+             <button class="edit-trash-btn ${
+               ui.editSelectedIds.size ? 'has-selection' : ''
+             }" data-action="edit-bulk-delete" aria-label="선택한 단어 삭제">🗑</button>`
+          : ''
+      }
       ${renderSearchBar()}
     </div>
     <div class="position-indicator">${positionText}</div>
@@ -2221,7 +2412,7 @@ function renderFeedPanel(filtered, windowWords) {
       ${renderJumpBox(filtered.length)}
       ${paginationBar}
     </div>
-    <div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${settings.cardWidth}px);">${
+    <div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${currentCardWidth}px);">${
     cardsHtml || emptyStateHtml
   }</div>
     <div class="feed-nav-row">
@@ -2308,6 +2499,8 @@ function renderPaginationBar(filteredLen) {
 
 function renderCard(word, index, focused) {
   const p = progress[word.id] || defaultProgressFor(word);
+  if (ui.editMode) return renderEditableCard(word, p, index, focused);
+
   const revealed = ui.revealedIds.has(word.id) || settings.mode === 'memorize';
 
   const wordVisible = settings.mode !== 'word-test' || revealed;
@@ -2354,6 +2547,46 @@ function renderCard(word, index, focused) {
   )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
     ${wordHtml}
     <div class="card-meanings">${meaningsHtml}</div>
+  </div>`;
+}
+
+// Edit mode swaps the whole card for plain inputs/textareas instead of
+// static text — see the 'focusout' handler for how edits get committed
+// (on leaving a field, not per keystroke: re-rendering mid-edit would tear
+// out the very field being typed into, the same class of bug the search
+// box's IME composition had). A word with no meanings yet still gets one
+// blank editable row so there's somewhere to type a first one.
+function renderEditableCard(word, p, index, focused) {
+  const selected = ui.editSelectedIds.has(word.id);
+  const meanings = word.meanings.length ? word.meanings : [{ meaning: '', example: '' }];
+  const meaningsHtml = meanings
+    .map(
+      (m, i) => `
+      <div class="edit-meaning-row">
+        <span class="edit-meaning-index">${circledNumber(i + 1)}</span>
+        <div class="edit-meaning-fields">
+          <textarea class="edit-field edit-meaning-input" rows="1" data-action="edit-meaning" data-id="${escapeHtml(
+            word.id
+          )}" data-index="${i}" placeholder="뜻">${escapeHtml(m.meaning)}</textarea>
+          <textarea class="edit-field edit-example-input" rows="1" data-action="edit-example" data-id="${escapeHtml(
+            word.id
+          )}" data-index="${i}" placeholder="예시 (선택)">${escapeHtml(m.example)}</textarea>
+        </div>
+      </div>`
+    )
+    .join('');
+
+  return `
+  <div class="word-card editable ${focused ? 'focused' : ''} ${selected ? 'edit-selected' : ''} ${
+    p.memorized ? 'memorized' : ''
+  }" data-id="${escapeHtml(word.id)}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+    <button class="card-edit-delete" data-action="edit-delete-word" data-id="${escapeHtml(
+      word.id
+    )}" aria-label="단어 삭제">×</button>
+    <input type="text" class="edit-field edit-word-input" data-action="edit-word" data-id="${escapeHtml(
+      word.id
+    )}" value="${escapeHtml(word.word)}" placeholder="표제어" />
+    <div class="edit-meanings">${meaningsHtml}</div>
   </div>`;
 }
 
@@ -2509,13 +2742,11 @@ function renderAdvancedSearchPanel() {
       <div class="modal-section">
         <div class="modal-section-title">검색 방식</div>
         <div class="chip-group">
-          ${filterChip('정규식 사용', 'useRegex')}
+          <button class="chip-btn ${
+            !s.useRegex ? 'active' : ''
+          }" data-action="search-filter-toggle" data-filter="useRegex">정규식 미사용</button>
         </div>
-        ${
-          s.useRegex
-            ? `<div class="modal-hint">꺼져 있으면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다. 켜면 검색어를 정규표현식으로 해석합니다.</div>`
-            : ''
-        }
+        <div class="modal-hint">기본적으로 검색어를 정규표현식으로 해석합니다. "정규식 미사용"을 누르면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다.</div>
         ${regexError ? `<div class="modal-hint modal-hint-error">잘못된 정규식: ${escapeHtml(regexError)}</div>` : ''}
       </div>
       <div class="modal-section">
@@ -2572,7 +2803,7 @@ function renderHelpPanel() {
           <li>검색창 왼쪽에서 범위 선택 — <b>표제어+뜻</b>(기본) / 표제어 / 뜻</li>
           <li>결과는 단어 분류별로 묶이고, 그 안에서 가나다순으로 정렬됩니다</li>
           <li><b>⚙ 고급 검색</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
-          <li><b>정규식 사용</b>을 켜면 검색어를 정규표현식으로 해석합니다. 꺼져 있으면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다</li>
+          <li>기본적으로 검색어를 <b>정규표현식</b>으로 해석합니다. 고급 검색에서 <b>정규식 미사용</b>을 누르면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다</li>
         </ul>
       </div>
       <div class="modal-section">
@@ -2726,10 +2957,15 @@ document.getElementById('app').addEventListener('click', (e) => {
   // clears focus. Whichever branch below ends up handling the click will
   // render with this updated focus already applied; if nothing else
   // matches, the fallback render() at the bottom picks it up.
-  const cardEl = e.target.closest('.word-card');
-  const newFocus = cardEl ? Number(cardEl.getAttribute('data-index')) : null;
-  const focusChanged = newFocus !== ui.focusedIndex;
-  ui.focusedIndex = newFocus;
+  // Suspended in edit mode — a click there means "select for bulk delete"
+  // (see setupEditSelection), a different meaning entirely.
+  let focusChanged = false;
+  if (!ui.editMode) {
+    const cardEl = e.target.closest('.word-card');
+    const newFocus = cardEl ? Number(cardEl.getAttribute('data-index')) : null;
+    focusChanged = newFocus !== ui.focusedIndex;
+    ui.focusedIndex = newFocus;
+  }
 
   // exact-target checks (must not fire when clicking descendants)
   if (e.target.dataset && e.target.dataset.action === 'close-export') {
@@ -2879,38 +3115,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const fitCardWidth = e.target.closest('[data-action="fit-card-width"]');
-  if (fitCardWidth) {
-    if (ui.fitWidthActive) {
-      // toggle off: restore whatever width was in effect before fitting
-      settings.cardWidth = ui.preFitCardWidth != null ? ui.preFitCardWidth : settings.cardWidth;
-      ui.fitWidthActive = false;
-      ui.preFitCardWidth = null;
-      saveSettings(settings);
-      render();
-    } else {
-      const cardsEl = document.querySelector('.cards');
-      if (cardsEl) {
-        // floor (not round) guarantees cols*fit + gaps never exceeds the
-        // measured available width, so no residual horizontal scroll —
-        // only the minimum is enforced here, not the usual max, since the
-        // whole point is to fill the feed exactly even if that's wider
-        // than the slider's normal ceiling. clientWidth includes .cards'
-        // own 5px-per-side padding (added earlier so the focus ring isn't
-        // clipped), which isn't actually usable by the grid tracks, so
-        // that has to come off the available amount too.
-        const available = cardsEl.clientWidth - 14;
-        const rawFit = Math.floor((available - (settings.cols - 1) * CARD_GAP) / settings.cols);
-        ui.preFitCardWidth = settings.cardWidth;
-        settings.cardWidth = Math.max(CARD_MIN_WIDTH, rawFit);
-        ui.fitWidthActive = true;
-        saveSettings(settings);
-        render();
-      }
-    }
-    return;
-  }
-
   const foldBtn = e.target.closest('[data-action="toggle-fold"]');
   if (foldBtn) {
     const cat = foldBtn.getAttribute('data-category');
@@ -2933,6 +3137,50 @@ document.getElementById('app').addEventListener('click', (e) => {
     settings.progressCollapsed = !settings.progressCollapsed;
     saveSettings(settings);
     render();
+    return;
+  }
+
+  const editModeBtn = e.target.closest('[data-action="toggle-edit-mode"]');
+  if (editModeBtn) {
+    ui.editMode = !ui.editMode;
+    ui.editSelectedIds = new Set();
+    ui.focusedIndex = null;
+    render();
+    return;
+  }
+
+  const editDeleteWordBtn = e.target.closest('[data-action="edit-delete-word"]');
+  if (editDeleteWordBtn) {
+    const id = editDeleteWordBtn.getAttribute('data-id');
+    const w = words.find((x) => x.id === id);
+    if (w && confirm(`"${w.word || '(빈 단어)'}" 단어를 삭제하시겠습니까?`)) {
+      words = words.filter((x) => x.id !== id);
+      delete progress[id];
+      ui.editSelectedIds.delete(id);
+      saveWords(words);
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const editAddWordBtn = e.target.closest('[data-action="edit-add-word"]');
+  if (editAddWordBtn) {
+    createNewWord();
+    return;
+  }
+
+  const editBulkDeleteBtn = e.target.closest('[data-action="edit-bulk-delete"]');
+  if (editBulkDeleteBtn) {
+    if (ui.editSelectedIds.size === 0) return;
+    if (confirm(`선택한 ${ui.editSelectedIds.size}개 단어를 삭제하시겠습니까?`)) {
+      words = words.filter((w) => !ui.editSelectedIds.has(w.id));
+      for (const id of ui.editSelectedIds) delete progress[id];
+      ui.editSelectedIds = new Set();
+      saveWords(words);
+      saveProgress(progress);
+      render();
+    }
     return;
   }
 
@@ -3056,14 +3304,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const boldBtn = e.target.closest('[data-action="toggle-bold"]');
-  if (boldBtn) {
-    settings.bold = !settings.bold;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const exportStatusBtn = e.target.closest('[data-action="export-status"]');
   if (exportStatusBtn) {
     const key = exportStatusBtn.getAttribute('data-status');
@@ -3155,16 +3395,6 @@ document.getElementById('app').addEventListener('change', (e) => {
     return;
   }
 
-  const cardWidthSlider = e.target.closest('[data-action="card-width-slider"]');
-  if (cardWidthSlider) {
-    settings.cardWidth = Number(cardWidthSlider.value);
-    ui.fitWidthActive = false; // manual override supersedes a previous fit
-    ui.preFitCardWidth = null;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const cardHeightSlider = e.target.closest('[data-action="card-height-slider"]');
   if (cardHeightSlider) {
     settings.cardHeight = Number(cardHeightSlider.value);
@@ -3228,6 +3458,41 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   renderPreservingSearchFocus();
 });
 
+// ---------- edit mode: commit field edits on blur, not per keystroke ----------
+// 'focusout' (the bubbling version of 'blur') fires reliably before any
+// other click-driven action processes, since the browser always blurs a
+// focused field before a click elsewhere is handled — so committing only
+// here (never on 'input') is enough to not lose in-progress edits, while
+// completely avoiding a render() while the user is still typing. That
+// matters more here than for the search box: edit mode can have dozens of
+// input/textarea fields on screen at once, and re-rendering on every
+// keystroke in any of them would tear out whichever one is focused, same
+// as the search box's IME bug but multiplied across every field.
+document.getElementById('app').addEventListener('focusout', (e) => {
+  const target = e.target;
+  if (!target.classList) return;
+
+  if (target.classList.contains('edit-word-input')) {
+    const w = words.find((x) => x.id === target.getAttribute('data-id'));
+    if (w) {
+      w.word = target.value.trim();
+      saveWords(words);
+    }
+    return;
+  }
+
+  if (target.classList.contains('edit-meaning-input') || target.classList.contains('edit-example-input')) {
+    const w = words.find((x) => x.id === target.getAttribute('data-id'));
+    if (!w) return;
+    const idx = Number(target.getAttribute('data-index'));
+    if (!w.meanings[idx]) w.meanings[idx] = { meaning: '', example: '' };
+    if (target.classList.contains('edit-meaning-input')) w.meanings[idx].meaning = target.value.trim();
+    else w.meanings[idx].example = target.value.trim();
+    saveWords(words);
+    return;
+  }
+});
+
 // ---------- swipe paging (touch only, so mouse/trackpad use on PC is untouched) ----------
 
 (function setupSwipeNavigation() {
@@ -3239,6 +3504,7 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   const appEl = document.getElementById('app');
 
   appEl.addEventListener('pointerdown', (e) => {
+    if (ui.editMode) return; // a drag across cards now means "select for deletion" — see setupEditSelection
     if (e.pointerType !== 'touch') return;
     if (!e.target.closest('.cards')) return;
     touch = { x: e.clientX, y: e.clientY, t: Date.now() };
@@ -3307,6 +3573,7 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   }
 
   appEl.addEventListener('pointerdown', (e) => {
+    if (ui.editMode) return; // edit mode redefines card interaction entirely — see setupEditSelection
     const card = e.target.closest('.word-card');
     if (!card) return;
     clearPress();
@@ -3377,6 +3644,56 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   );
 })();
 
+// ---------- edit mode: drag across cards to mark them for bulk delete ----------
+// A single tap/click is just a zero-distance drag — toggling the one card
+// it landed on — so there's no separate "click to select" path to keep in
+// sync with this. Touching a field/button instead lets that control handle
+// its own click (editing text, the × delete, etc.) rather than toggling
+// selection underneath it.
+(function setupEditSelection() {
+  const appEl = document.getElementById('app');
+  let dragging = false;
+  let touchedIds = null;
+
+  function isInteractiveTarget(el) {
+    return Boolean(el.closest('input, textarea, button, select, a'));
+  }
+
+  function toggleSelected(id) {
+    if (ui.editSelectedIds.has(id)) ui.editSelectedIds.delete(id);
+    else ui.editSelectedIds.add(id);
+    render();
+  }
+
+  appEl.addEventListener('pointerdown', (e) => {
+    if (!ui.editMode) return;
+    if (isInteractiveTarget(e.target)) return;
+    const card = e.target.closest('.word-card.editable');
+    if (!card) return;
+    dragging = true;
+    touchedIds = new Set([card.getAttribute('data-id')]);
+    toggleSelected(card.getAttribute('data-id'));
+  });
+
+  appEl.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const card = el && el.closest('.word-card.editable');
+    if (!card) return;
+    const id = card.getAttribute('data-id');
+    if (touchedIds.has(id)) return; // already toggled once during this drag
+    touchedIds.add(id);
+    toggleSelected(id);
+  });
+
+  function endDrag() {
+    dragging = false;
+    touchedIds = null;
+  }
+  appEl.addEventListener('pointerup', endDrag);
+  appEl.addEventListener('pointercancel', endDrag);
+})();
+
 // ---------- keyboard shortcuts ----------
 
 document.addEventListener('keydown', (e) => {
@@ -3400,6 +3717,7 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (typing) return;
+  if (ui.editMode) return; // card focus/Space/Enter don't apply while editing
 
   const filtered = getDisplayWords();
   const windowWords = filtered.slice(ui.startIndex, ui.startIndex + settings.count);
