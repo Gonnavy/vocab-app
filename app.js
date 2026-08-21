@@ -27,6 +27,7 @@ const ui = {
   preFitCardWidth: null, // settings.cardWidth snapshot, restored when fit is toggled off
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
   mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
+  helpOpen: false,
   search: {
     query: '',
     scope: 'word-meaning', // 'word-meaning' | 'word' | 'meaning'
@@ -34,6 +35,7 @@ const ui = {
     memorized: false,
     unmemorized: false,
     important: false,
+    useRegex: false, // interpret query as a regular expression instead of a literal substring
     categories: null, // Set, lazily initialized when advanced search opens
   },
 };
@@ -184,7 +186,7 @@ function getFilteredWords() {
 // is "active" with an empty query, and to badge the advanced-search button.
 function isSearchAdvancedActive() {
   const s = ui.search;
-  if (s.memorized || s.unmemorized || s.important) return true;
+  if (s.memorized || s.unmemorized || s.important || s.useRegex) return true;
   if (s.categories) {
     const allCats = getCategories();
     if (s.categories.size !== allCats.length) return true;
@@ -200,11 +202,22 @@ function isSearchActive() {
   return Boolean(ui.search.query.trim()) || isSearchAdvancedActive();
 }
 
-function matchesSearchScope(word, query, scope) {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  const wordMatch = word.word.toLowerCase().includes(q);
-  const meaningMatch = word.meanings.some((m) => (m.meaning || '').toLowerCase().includes(q));
+// null when there's no query to validate, or when it isn't in regex mode —
+// both cases where "is the pattern valid" doesn't apply.
+function searchRegexError() {
+  const s = ui.search;
+  if (!s.useRegex || !s.query.trim()) return null;
+  try {
+    new RegExp(s.query.trim());
+    return null;
+  } catch (err) {
+    return err.message;
+  }
+}
+
+function matchesSearchScope(word, scope, matcher) {
+  const wordMatch = matcher(word.word);
+  const meaningMatch = word.meanings.some((m) => matcher(m.meaning || ''));
   if (scope === 'word') return wordMatch;
   if (scope === 'meaning') return meaningMatch;
   return wordMatch || meaningMatch;
@@ -215,16 +228,40 @@ function matchesSearchScope(word, query, scope) {
 // each group — a fixed, predictable order rather than the feed's normal
 // category-tab/shuffle-driven display, which this bypasses entirely while
 // a search is active (see getDisplayWords below).
+//
+// Regex mode is opt-in (the "정규식 사용" advanced-search toggle) precisely
+// so that plain search stays free of surprises — with it off, "*", ".",
+// "\" etc. in a query are just literal characters to look for, never
+// special syntax. An invalid pattern (regex mode only) matches nothing
+// rather than throwing or silently falling back to a literal search.
 function getSearchResults() {
   const s = ui.search;
   const query = s.query.trim();
   const cats = s.categories;
   const categoryOrder = new Map(getCategories().map((c, i) => [c, i]));
 
+  let matcher = () => true; // no query — everything passes this stage
+  let regexInvalid = false;
+  if (query) {
+    if (s.useRegex) {
+      try {
+        const re = new RegExp(query, 'i');
+        matcher = (text) => re.test(text);
+      } catch (err) {
+        regexInvalid = true;
+      }
+    } else {
+      const q = query.toLowerCase();
+      matcher = (text) => text.toLowerCase().includes(q);
+    }
+  }
+
+  if (regexInvalid) return [];
+
   return words
     .filter((w) => {
       if (cats && !cats.has(w.category)) return false;
-      if (!matchesSearchScope(w, query, s.scope)) return false;
+      if (!matchesSearchScope(w, s.scope, matcher)) return false;
       const p = progress[w.id];
       if (s.memorized || s.unmemorized) {
         const isMemo = Boolean(p && p.memorized);
@@ -407,7 +444,8 @@ function render() {
     '</div>' +
     renderMobileDrawer() +
     (ui.exportOpen ? renderExportPanel() : '') +
-    (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '');
+    (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
+    (ui.helpOpen ? renderHelpPanel() : '');
 }
 
 function renderMobileTopBar() {
@@ -431,12 +469,16 @@ function renderSearchBar() {
       )}</option>`
   ).join('');
 
+  const regexError = searchRegexError();
+
   return `
   <div class="search-bar">
     <select class="search-scope" data-action="search-scope" aria-label="검색 범위">${scopeOptionsHtml}</select>
-    <input type="text" class="search-input" data-action="search-input" placeholder="검색" value="${escapeHtml(
-      ui.search.query
-    )}" aria-label="단어 검색" />
+    <input type="text" class="search-input ${
+      regexError ? 'search-input-invalid' : ''
+    }" data-action="search-input" placeholder="검색" value="${escapeHtml(
+    ui.search.query
+  )}" aria-label="단어 검색" title="${regexError ? escapeHtml('잘못된 정규식: ' + regexError) : ''}" />
     <button class="search-advanced-btn ${
       isSearchAdvancedActive() ? 'active' : ''
     }" data-action="open-advanced-search" aria-label="고급 검색">⚙</button>
@@ -511,6 +553,7 @@ function renderMobileProgressView() {
     ${filterRow('미암기', 'unmemorized')}
     ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>
+    <button class="drawer-settings-btn" data-action="open-help">📖 사용법</button>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">⚙ 설정</button>
   `;
 }
@@ -631,6 +674,7 @@ function renderToolbar() {
     <div class="toolbar-row" ${toolbarStyle}>
       <button class="btn btn-open" data-action="open-csv">열기</button>
       <button class="btn" data-action="open-export">내보내기</button>
+      <button class="btn" data-action="open-help">사용법</button>
       <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
       <label class="opt">
         폰트
@@ -987,12 +1031,27 @@ function renderAdvancedSearchPanel() {
       )
       .join('');
 
+  const regexError = searchRegexError();
+  const countText = regexError ? '정규식 오류' : `${getSearchResults().length}개 단어 검색됨`;
+
   return `
   <div class="modal-backdrop" data-action="close-advanced-search">
     <div class="modal">
       <div class="modal-header">
         고급 검색
         <button class="modal-close" data-action="close-advanced-search">×</button>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">검색 방식</div>
+        <div class="chip-group">
+          ${filterChip('정규식 사용', 'useRegex')}
+        </div>
+        ${
+          s.useRegex
+            ? `<div class="modal-hint">꺼져 있으면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다. 켜면 검색어를 정규표현식으로 해석합니다.</div>`
+            : ''
+        }
+        ${regexError ? `<div class="modal-hint modal-hint-error">잘못된 정규식: ${escapeHtml(regexError)}</div>` : ''}
       </div>
       <div class="modal-section">
         <div class="modal-section-title">진행 상황</div>
@@ -1009,7 +1068,54 @@ function renderAdvancedSearchPanel() {
         </div>
       </div>
       <div class="modal-footer">
-        <span class="export-count-preview">${getSearchResults().length}개 단어 검색됨</span>
+        <span class="export-count-preview">${countText}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderHelpPanel() {
+  return `
+  <div class="modal-backdrop" data-action="close-help">
+    <div class="modal">
+      <div class="modal-header">
+        사용법
+        <button class="modal-close" data-action="close-help">×</button>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">PC 단축키</div>
+        <ul class="help-list">
+          <li><b>방향키 / WASD</b> — 카드 포커스 이동 (페이지 끝에서 다음/이전 페이지로 자동 이동)</li>
+          <li><b>Space</b> — 포커스된 카드 암기/미암기 체크</li>
+          <li><b>Enter</b> — 포커스된 카드 중요 체크/해제</li>
+          <li><b>Ctrl + ← / →</b> — 페이지 이동</li>
+          <li><b>Ctrl + E</b> — 내보내기 창 열기/닫기</li>
+        </ul>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">모바일 동작</div>
+        <ul class="help-list">
+          <li><b>좌우 스와이프</b> (카드 영역) — 페이지 이동</li>
+          <li><b>더블탭</b> (카드) — 암기/미암기 체크</li>
+          <li><b>길게 누르기</b> (카드) — 중요 체크/해제</li>
+          <li><b>☰ 메뉴</b> — 진행률·분류별 통계, 사용법, 설정</li>
+        </ul>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">검색</div>
+        <ul class="help-list">
+          <li>검색창 왼쪽에서 범위 선택 — <b>표제어+뜻</b>(기본) / 표제어 / 뜻</li>
+          <li>결과는 단어 분류별로 묶이고, 그 안에서 가나다순으로 정렬됩니다</li>
+          <li><b>⚙ 고급 검색</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
+          <li><b>정규식 사용</b>을 켜면 검색어를 정규표현식으로 해석합니다. 꺼져 있으면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다</li>
+        </ul>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">카드 표시</div>
+        <ul class="help-list">
+          <li><b>초록 테두리</b> (카드 전체) — 암기된 단어</li>
+          <li><b>골드 테두리</b> (표제어) — 중요 단어</li>
+        </ul>
       </div>
     </div>
   </div>`;
@@ -1179,6 +1285,12 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  if (e.target.dataset && e.target.dataset.action === 'close-help') {
+    ui.helpOpen = false;
+    render();
+    return;
+  }
+
   const openBtn = e.target.closest('[data-action="open-csv"]');
   if (openBtn) {
     document.getElementById('csv-file-input').click();
@@ -1190,6 +1302,7 @@ document.getElementById('app').addEventListener('click', (e) => {
     if (!ui.exportCategories) ui.exportCategories = new Set(getCategories());
     ui.exportOpen = true;
     ui.search.advancedOpen = false;
+    ui.helpOpen = false;
     render();
     return;
   }
@@ -1199,6 +1312,16 @@ document.getElementById('app').addEventListener('click', (e) => {
     if (!ui.search.categories) ui.search.categories = new Set(getCategories());
     ui.search.advancedOpen = true;
     ui.exportOpen = false;
+    ui.helpOpen = false;
+    render();
+    return;
+  }
+
+  const openHelp = e.target.closest('[data-action="open-help"]');
+  if (openHelp) {
+    ui.helpOpen = true;
+    ui.exportOpen = false;
+    ui.search.advancedOpen = false;
     render();
     return;
   }
@@ -1688,24 +1811,27 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
 // for this). Long-press has no native event, so it's hand-rolled with a
 // timer that a real swipe/scroll cancels via the move-distance check.
 
+// Double-tap used to ride the browser's native dblclick synthesis, but
+// right after a swipe, mobile browsers can sit on a "was this a fling or a
+// tap" cooldown before they'll synthesize click/dblclick again — the
+// double-tap would silently miss for a second or two right after paging.
+// Tracking taps ourselves from pointerdown/pointerup sidesteps that
+// cooldown entirely, and unifies the touch and mouse cases (a fast,
+// same-spot mouse double-click behaves the same way).
 (function setupCardGestures() {
   const appEl = document.getElementById('app');
 
-  appEl.addEventListener('dblclick', (e) => {
-    const card = e.target.closest('.word-card');
-    if (!card) return;
-    e.preventDefault();
-    toggleMemorized(card.getAttribute('data-id'));
-  });
-
   const LONG_PRESS_MS = 550;
   const MOVE_CANCEL_THRESHOLD = 10; // px — beyond this it's a drag/swipe, not a press
+  const DOUBLE_TAP_MAX_INTERVAL_MS = 400;
+  const DOUBLE_TAP_MAX_DISTANCE = 30; // px — finger placement isn't pixel-precise
 
   let timer = null;
   let startX = 0;
   let startY = 0;
   let pressedId = null;
   let firedLongPress = false;
+  let lastTap = null; // { id, x, y, t } — first tap of a potential double-tap/click
 
   function clearPress() {
     if (timer) {
@@ -1716,7 +1842,6 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
   }
 
   appEl.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') return; // PC already has Enter for this — no mouse long-press
     const card = e.target.closest('.word-card');
     if (!card) return;
     clearPress();
@@ -1724,11 +1849,16 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
     startY = e.clientY;
     pressedId = card.getAttribute('data-id');
     firedLongPress = false;
-    timer = setTimeout(() => {
-      timer = null;
-      firedLongPress = true;
-      toggleImportant(pressedId);
-    }, LONG_PRESS_MS);
+
+    if (e.pointerType === 'touch') {
+      // PC already has Enter for this — no mouse long-press
+      timer = setTimeout(() => {
+        timer = null;
+        firedLongPress = true;
+        lastTap = null; // a long-press shouldn't combine with a tap that follows it
+        toggleImportant(pressedId);
+      }, LONG_PRESS_MS);
+    }
   });
 
   appEl.addEventListener('pointermove', (e) => {
@@ -1738,7 +1868,31 @@ document.getElementById('app').addEventListener('compositionend', (e) => {
     }
   });
 
-  appEl.addEventListener('pointerup', clearPress);
+  appEl.addEventListener('pointerup', (e) => {
+    // pressedId is already cleared above for anything that moved past the
+    // threshold (a swipe/drag) or that already fired as a long-press —
+    // only a clean, stationary tap/click reaches here.
+    const wasCleanPress = Boolean(pressedId) && !firedLongPress;
+    const card = e.target.closest('.word-card');
+    clearPress();
+    if (!wasCleanPress || !card) return;
+
+    const id = card.getAttribute('data-id');
+    const now = Date.now();
+    if (
+      lastTap &&
+      lastTap.id === id &&
+      now - lastTap.t < DOUBLE_TAP_MAX_INTERVAL_MS &&
+      Math.abs(e.clientX - lastTap.x) < DOUBLE_TAP_MAX_DISTANCE &&
+      Math.abs(e.clientY - lastTap.y) < DOUBLE_TAP_MAX_DISTANCE
+    ) {
+      toggleMemorized(id);
+      lastTap = null;
+    } else {
+      lastTap = { id, x: e.clientX, y: e.clientY, t: now };
+    }
+  });
+
   appEl.addEventListener('pointercancel', clearPress);
 
   // Capture phase, so this runs before the big click handler further down —

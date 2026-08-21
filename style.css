@@ -857,6 +857,53 @@ input {
   font-size: 0.9em;
 }
 
+.help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--text);
+}
+
+.help-list li {
+  line-height: 1.45;
+}
+
+.help-list b {
+  color: var(--accent);
+}
+
+.help-list code {
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.modal-hint {
+  margin-top: 8px;
+  font-size: 0.82em;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.modal-hint code {
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.modal-hint-error {
+  color: var(--important);
+}
+
+.search-input-invalid {
+  border-color: var(--important) !important;
+}
+
 .modal-footer {
   display: flex;
   align-items: center;
