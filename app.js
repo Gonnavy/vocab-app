@@ -602,11 +602,25 @@ function renderJumpBox(filteredLen) {
   </div>`;
 }
 
+// Mobile shares the same JS-render path as desktop (no separate mobile
+// bundle), so this is the one spot that needs to know the viewport class —
+// the pagination bar's button count/set genuinely differs by device rather
+// than just its CSS presentation. Safe without a resize listener: a phone
+// stays "mobile" under this query across a portrait<->landscape rotation
+// (the same two breakpoints the mobile CSS uses), so it can't go stale
+// between renders the way a plain max-width check would.
+function isMobileLayout() {
+  return window.matchMedia(
+    '(orientation: portrait) and (max-width: 560px), (orientation: landscape) and (max-height: 560px)'
+  ).matches;
+}
+
 function renderPaginationBar(filteredLen) {
+  const mobile = isMobileLayout();
   const totalPages = Math.max(1, Math.ceil(filteredLen / settings.count));
   const currentPage = Math.min(totalPages, currentPageNumber());
 
-  const windowSize = 10;
+  const windowSize = mobile ? 7 : 10;
   let startPage = Math.max(1, currentPage - Math.floor(windowSize / 2));
   let endPage = Math.min(totalPages, startPage + windowSize - 1);
   startPage = Math.max(1, endPage - windowSize + 1);
@@ -616,6 +630,16 @@ function renderPaginationBar(filteredLen) {
     pageButtons += `<button class="page-num-btn ${
       p === currentPage ? 'current' : ''
     }" data-action="goto-page" data-page="${p}">${p}</button>`;
+  }
+
+  // Mobile drops the step/jump icon buttons entirely — swiping already
+  // covers single-page stepping, and the ⏮⏪⏩⏭ row eats too much width on
+  // a phone screen for what it adds. Just the tappable page numbers remain.
+  if (mobile) {
+    return `
+  <div class="pagination-bar">
+    <div class="page-num-list">${pageButtons}</div>
+  </div>`;
   }
 
   const atFirst = currentPage <= 1;

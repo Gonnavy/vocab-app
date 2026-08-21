@@ -387,6 +387,12 @@ input {
   padding: 5px;
   margin: -5px;
   align-content: start;
+  /* Without this, a touch drag here is ambiguous to the browser (the page
+     also scrolls vertically) and it can claim the gesture as a native
+     scroll mid-swipe, cancelling the pointer sequence before our swipe
+     handler's pointerup ever fires. pan-y keeps vertical scrolling native
+     while forcing horizontal movement to stay under JS control. */
+  touch-action: pan-y;
 }
 
 .cards-empty {
@@ -1068,6 +1074,14 @@ input {
   .opt,
   .slider-opt {
     font-size: 0.85em;
+  }
+
+  /* no keyboard on touch, so the focus ring has nothing left to serve —
+     tapping a card still sets ui.focusedIndex internally (harmless), this
+     just drops the visual outline it would otherwise draw */
+  .word-card.focused {
+    box-shadow: var(--card-shadow);
+    z-index: auto;
   }
 }
 
