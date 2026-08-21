@@ -24,8 +24,6 @@
   --accent-soft: #ecebfe;
   --success: #0e8c5a;
   --success-soft: #e3faf0;
-  --caution: #ec5f3c;
-  --caution-soft: #ffece5;
   --important: #cf8a13;
   --important-soft: #fdf0d5;
   --muted-pill: #b7bccb;
@@ -43,8 +41,6 @@ body.dark {
   --accent-soft: #322f57;
   --success: #159961;
   --success-soft: #1c3a30;
-  --caution: #ff8368;
-  --caution-soft: #452a24;
   --important: #f2ba3f;
   --important-soft: #453723;
   --muted-pill: #4d5568;
@@ -411,6 +407,14 @@ input {
   padding: 40px 0;
   text-align: center;
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.cards-empty p {
+  margin: 0;
 }
 
 .word-card {
@@ -449,49 +453,6 @@ input {
      card/feed's touch-action — that's what was swallowing swipes started
      over the toggle buttons. */
   touch-action: pan-y;
-}
-
-.count-widget {
-  flex: 0 0 auto;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.count-btn {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 11px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 6px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.count-btn:hover {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.count-value {
-  min-width: 20px;
-  text-align: center;
-  font-size: 0.78em;
-  font-weight: 700;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
 }
 
 .memo-toggle {
@@ -553,12 +514,6 @@ input {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-}
-
-.pill-toggle.caution.active {
-  background: var(--caution);
-  border-color: var(--caution);
-  color: #fff;
 }
 
 .pill-toggle.important.active {
@@ -1101,6 +1056,20 @@ input {
     box-shadow: var(--card-shadow);
     z-index: auto;
   }
+
+  /* 암기/중요 toggles are supporting controls, not the content — headword
+     and meaning are. Shrink them and tighten the gap above the headword so
+     the row reads as a compact status strip instead of competing for
+     attention with the actual content underneath. */
+  .card-toggles {
+    margin-bottom: 6px;
+  }
+  .memo-option {
+    padding: 3px 8px;
+  }
+  .pill-toggle {
+    padding: 3px 10px;
+  }
 }
 
 @media (orientation: portrait) and (max-width: 560px) {
@@ -1252,11 +1221,11 @@ function isTruthyFlag(v) {
 // {meaning, example} pairs. Any text content (Korean/Hanja/Hiragana/Latin/
 // digits/symbols) is accepted as-is; only a blank word is rejected.
 //
-// Optional progress-sync columns 5-8 (memorized,caution,important,checked)
-// let a CSV exported from another device carry study progress along with
-// the word list. Their presence is detected from the header row's column
-// count so plain word-list CSVs (no such columns) are unaffected — imported
-// words then get importedProgress=null and fall back to local defaults.
+// Optional progress-sync columns 5-7 (memorized,important,checked) let a
+// CSV exported from another device carry study progress along with the
+// word list. Their presence is detected from the header row's column count
+// so plain word-list CSVs (no such columns) are unaffected — imported words
+// then get importedProgress=null and fall back to local defaults.
 function rowsToWords(rows) {
   if (rows.length === 0) return [];
 
@@ -1285,7 +1254,7 @@ function rowsToWords(rows) {
         word,
         meanings: [],
         importedProgress: hasProgressCols
-          ? { memorized: false, caution: false, important: false, checked: [] }
+          ? { memorized: false, important: false, checked: [] }
           : null,
       };
       words.push(entry);
@@ -1296,9 +1265,8 @@ function rowsToWords(rows) {
 
     if (hasProgressCols) {
       entry.importedProgress.memorized = isTruthyFlag(cols[4]);
-      entry.importedProgress.caution = isTruthyFlag(cols[5]);
-      entry.importedProgress.important = isTruthyFlag(cols[6]);
-      if (meaning || example) entry.importedProgress.checked.push(isTruthyFlag(cols[7]));
+      entry.importedProgress.important = isTruthyFlag(cols[5]);
+      if (meaning || example) entry.importedProgress.checked.push(isTruthyFlag(cols[6]));
     }
   }
 
@@ -1328,15 +1296,15 @@ function csvField(value) {
 
 // Inverse of parseCSVToWords: one row per {meaning, example} pair (or a
 // single blank-meaning row for words with no meanings recorded). Also
-// carries each word's study progress (memorized/caution/important, plus
-// per-meaning checked state) in trailing columns so the file can be
-// re-imported — on this device or another — with progress intact.
+// carries each word's study progress (memorized/important, plus per-meaning
+// checked state) in trailing columns so the file can be re-imported — on
+// this device or another — with progress intact.
 function wordsToCSV(words, progress) {
-  const lines = ['category,word,meaning,example,memorized,caution,important,checked'];
+  const lines = ['category,word,meaning,example,memorized,important,checked'];
   const flag = (b) => (b ? '1' : '0');
   for (const w of words) {
-    const p = (progress && progress[w.id]) || { memorized: false, caution: false, important: false, checked: [] };
-    const wordFlags = [flag(p.memorized), flag(p.caution), flag(p.important)];
+    const p = (progress && progress[w.id]) || { memorized: false, important: false, checked: [] };
+    const wordFlags = [flag(p.memorized), flag(p.important)];
     if (w.meanings.length === 0) {
       lines.push([csvField(w.category), csvField(w.word), '', '', ...wordFlags, ''].join(','));
       continue;
@@ -1438,10 +1406,8 @@ function saveSettings(settings) {
 function defaultProgressFor(word) {
   return {
     memorized: false, // 미암기(false) / 암기(true)
-    caution: false,
     important: false,
     checked: (word.meanings || []).map(() => false),
-    count: 0, // never below 0
   };
 }
 
@@ -1461,12 +1427,12 @@ let progress = loadProgress();
 let settings = loadSettings();
 const ui = {
   activeCategory: null, // null = all categories
-  filterMode: null, // null | 'unmemorized' | 'caution' | 'important'
+  filterMode: null, // null | 'unmemorized' | 'important'
   startIndex: 0,
   revealedIds: new Set(), // transient: which cards are "flipped" in test modes
   focusedIndex: null, // index within current window; null = no card focused yet
   exportOpen: false,
-  exportStatus: { all: true, unmemorized: false, caution: false, important: false },
+  exportStatus: { all: true, unmemorized: false, important: false },
   exportCategories: null, // Set, lazily initialized when export panel opens
   collapsedCategories: new Set(), // category names folded in the progress panel
   shuffleActive: false,
@@ -1494,7 +1460,6 @@ function resyncProgress(list) {
       const ip = w.importedProgress;
       progress[w.id] = {
         memorized: Boolean(ip.memorized),
-        caution: Boolean(ip.caution),
         important: Boolean(ip.important),
         checked: w.meanings.map((_, i) => Boolean(ip.checked[i])),
       };
@@ -1556,7 +1521,6 @@ function computeStats() {
   const total = words.length;
   const memorized = words.filter(isMemorized).length;
   const unmemorized = total - memorized;
-  const caution = words.filter((w) => progress[w.id] && progress[w.id].caution).length;
   const important = words.filter((w) => progress[w.id] && progress[w.id].important).length;
 
   const byCategory = getCategories().map((cat) => {
@@ -1568,7 +1532,6 @@ function computeStats() {
       memorized: memoInCat,
       rate: inCat.length ? Math.round((memoInCat / inCat.length) * 100) : 0,
       unmemorized: inCat.length - memoInCat,
-      caution: inCat.filter((w) => progress[w.id] && progress[w.id].caution).length,
       important: inCat.filter((w) => progress[w.id] && progress[w.id].important).length,
     };
   });
@@ -1578,7 +1541,6 @@ function computeStats() {
     memorized,
     memoRate: total ? Math.round((memorized / total) * 100) : 0,
     unmemorized,
-    caution,
     important,
     byCategory,
   };
@@ -1587,7 +1549,6 @@ function computeStats() {
 function matchesFilter(word, filter) {
   const p = progress[word.id];
   if (filter === 'unmemorized') return !p || !p.memorized;
-  if (filter === 'caution') return Boolean(p && p.caution);
   if (filter === 'important') return Boolean(p && p.important);
   return true;
 }
@@ -1813,7 +1774,7 @@ function renderMobileProgressView() {
         ${
           collapsed
             ? ''
-            : `${subRow('미암기', 'unmemorized')}${subRow('주의', 'caution')}${subRow('중요', 'important')}`
+            : `${subRow('미암기', 'unmemorized')}${subRow('중요', 'important')}`
         }
       </div>`;
     })
@@ -1838,7 +1799,6 @@ function renderMobileProgressView() {
       <span>전체 보기</span>
     </div>
     ${filterRow('미암기', 'unmemorized')}
-    ${filterRow('주의', 'caution')}
     ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">⚙ 설정</button>
@@ -2019,6 +1979,14 @@ function renderFeedPanel(filtered, windowWords) {
 
   const cardsHtml = windowWords.map((w, i) => renderCard(w, i, i === ui.focusedIndex)).join('');
 
+  const emptyStateHtml =
+    words.length === 0
+      ? `<div class="cards-empty">
+           <p>불러온 단어장이 없습니다</p>
+           <button class="btn btn-primary" data-action="open-csv">CSV 열기</button>
+         </div>`
+      : '<div class="cards-empty">단어가 없습니다</div>';
+
   const paginationBar = renderPaginationBar(filtered.length);
 
   return `
@@ -2034,7 +2002,7 @@ function renderFeedPanel(filtered, windowWords) {
       ${paginationBar}
     </div>
     <div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${settings.cardWidth}px);">${
-    cardsHtml || '<div class="cards-empty">단어가 없습니다</div>'
+    cardsHtml || emptyStateHtml
   }</div>
     <div class="feed-nav-row">
       ${paginationBar}
@@ -2164,23 +2132,11 @@ function renderCard(word, index, focused) {
     word.id
   )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
     <div class="card-toggles">
-      <div class="count-widget">
-        <button class="count-btn count-up" data-action="word-count-inc" data-id="${escapeHtml(
-          word.id
-        )}" aria-label="카운트 증가">▲</button>
-        <span class="count-value">${p.count || 0}</span>
-        <button class="count-btn count-down" data-action="word-count-dec" data-id="${escapeHtml(
-          word.id
-        )}" aria-label="카운트 감소">▼</button>
-      </div>
       <button class="memo-toggle ${p.memorized ? 'memorized' : ''}" data-action="toggle-memorized" data-id="${escapeHtml(
     word.id
   )}">
         <span class="memo-option">미암기</span><span class="memo-option">암기</span>
       </button>
-      <button class="pill-toggle caution ${p.caution ? 'active' : ''}" data-action="toggle-caution" data-id="${escapeHtml(
-    word.id
-  )}">주의</button>
       <button class="pill-toggle important ${p.important ? 'active' : ''}" data-action="toggle-important" data-id="${escapeHtml(
     word.id
   )}">중요</button>
@@ -2222,7 +2178,7 @@ function renderProgressPanel() {
         ${
           collapsed
             ? ''
-            : `${subRow('미암기', 'unmemorized')}${subRow('주의', 'caution')}${subRow('중요', 'important')}`
+            : `${subRow('미암기', 'unmemorized')}${subRow('중요', 'important')}`
         }
       </div>`;
     })
@@ -2253,7 +2209,6 @@ function renderProgressPanel() {
       <span>전체 보기</span>
     </div>
     ${filterRow('미암기', 'unmemorized')}
-    ${filterRow('주의', 'caution')}
     ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>
   </aside>`;
@@ -2293,7 +2248,6 @@ function renderExportPanel() {
         <div class="chip-group">
           ${statusButton('전체', 'all')}
           ${statusButton('미암기', 'unmemorized')}
-          ${statusButton('주의', 'caution')}
           ${statusButton('중요단어', 'important')}
         </div>
       </div>
@@ -2317,10 +2271,9 @@ function getExportMatches() {
   return words.filter((w) => {
     if (!cats.has(w.category)) return false;
     if (s.all) return true;
-    if (!s.unmemorized && !s.caution && !s.important) return false;
+    if (!s.unmemorized && !s.important) return false;
     const p = progress[w.id];
     if (s.unmemorized && (!p || !p.memorized)) return true;
-    if (s.caution && p && p.caution) return true;
     if (s.important && p && p.important) return true;
     return false;
   });
@@ -2708,39 +2661,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const wordCountDec = e.target.closest('[data-action="word-count-dec"]');
-  if (wordCountDec) {
-    const p = progress[wordCountDec.getAttribute('data-id')];
-    if (p) {
-      p.count = Math.max(0, (p.count || 0) - 1);
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
-  const wordCountInc = e.target.closest('[data-action="word-count-inc"]');
-  if (wordCountInc) {
-    const p = progress[wordCountInc.getAttribute('data-id')];
-    if (p) {
-      p.count = (p.count || 0) + 1;
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
-  const cautionToggle = e.target.closest('[data-action="toggle-caution"]');
-  if (cautionToggle) {
-    const p = progress[cautionToggle.getAttribute('data-id')];
-    if (p) {
-      p.caution = !p.caution;
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
   const importantToggle = e.target.closest('[data-action="toggle-important"]');
   if (importantToggle) {
     const p = progress[importantToggle.getAttribute('data-id')];
@@ -3034,33 +2954,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Enter/Backspace no longer page — they adjust the focused word's count.
-  if (key === 'Enter') {
-    if (ui.focusedIndex === null || windowWords.length === 0) return;
-    e.preventDefault();
-    const w = windowWords[ui.focusedIndex];
-    const p = w && progress[w.id];
-    if (p) {
-      p.count = (p.count || 0) + 1;
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
-  if (key === 'Backspace') {
-    e.preventDefault();
-    if (ui.focusedIndex !== null && windowWords.length > 0) {
-      const w = windowWords[ui.focusedIndex];
-      const p = w && progress[w.id];
-      if (p) {
-        p.count = Math.max(0, (p.count || 0) - 1);
-        saveProgress(progress);
-        render();
-      }
-    }
-    return;
-  }
 });
 
 render();

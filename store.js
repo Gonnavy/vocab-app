@@ -77,9 +77,7 @@ function saveSettings(settings) {
 function defaultProgressFor(word) {
   return {
     memorized: false, // 미암기(false) / 암기(true)
-    caution: false,
     important: false,
     checked: (word.meanings || []).map(() => false),
-    count: 0, // never below 0
   };
 }

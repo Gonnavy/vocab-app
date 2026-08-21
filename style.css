@@ -13,8 +13,6 @@
   --accent-soft: #ecebfe;
   --success: #0e8c5a;
   --success-soft: #e3faf0;
-  --caution: #ec5f3c;
-  --caution-soft: #ffece5;
   --important: #cf8a13;
   --important-soft: #fdf0d5;
   --muted-pill: #b7bccb;
@@ -32,8 +30,6 @@ body.dark {
   --accent-soft: #322f57;
   --success: #159961;
   --success-soft: #1c3a30;
-  --caution: #ff8368;
-  --caution-soft: #452a24;
   --important: #f2ba3f;
   --important-soft: #453723;
   --muted-pill: #4d5568;
@@ -400,6 +396,14 @@ input {
   padding: 40px 0;
   text-align: center;
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.cards-empty p {
+  margin: 0;
 }
 
 .word-card {
@@ -438,49 +442,6 @@ input {
      card/feed's touch-action — that's what was swallowing swipes started
      over the toggle buttons. */
   touch-action: pan-y;
-}
-
-.count-widget {
-  flex: 0 0 auto;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.count-btn {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 11px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 6px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.count-btn:hover {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.count-value {
-  min-width: 20px;
-  text-align: center;
-  font-size: 0.78em;
-  font-weight: 700;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
 }
 
 .memo-toggle {
@@ -542,12 +503,6 @@ input {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-}
-
-.pill-toggle.caution.active {
-  background: var(--caution);
-  border-color: var(--caution);
-  color: #fff;
 }
 
 .pill-toggle.important.active {
@@ -1089,6 +1044,20 @@ input {
   .word-card.focused {
     box-shadow: var(--card-shadow);
     z-index: auto;
+  }
+
+  /* 암기/중요 toggles are supporting controls, not the content — headword
+     and meaning are. Shrink them and tighten the gap above the headword so
+     the row reads as a compact status strip instead of competing for
+     attention with the actual content underneath. */
+  .card-toggles {
+    margin-bottom: 6px;
+  }
+  .memo-option {
+    padding: 3px 8px;
+  }
+  .pill-toggle {
+    padding: 3px 10px;
   }
 }
 

@@ -90,11 +90,11 @@ function isTruthyFlag(v) {
 // {meaning, example} pairs. Any text content (Korean/Hanja/Hiragana/Latin/
 // digits/symbols) is accepted as-is; only a blank word is rejected.
 //
-// Optional progress-sync columns 5-8 (memorized,caution,important,checked)
-// let a CSV exported from another device carry study progress along with
-// the word list. Their presence is detected from the header row's column
-// count so plain word-list CSVs (no such columns) are unaffected — imported
-// words then get importedProgress=null and fall back to local defaults.
+// Optional progress-sync columns 5-7 (memorized,important,checked) let a
+// CSV exported from another device carry study progress along with the
+// word list. Their presence is detected from the header row's column count
+// so plain word-list CSVs (no such columns) are unaffected — imported words
+// then get importedProgress=null and fall back to local defaults.
 function rowsToWords(rows) {
   if (rows.length === 0) return [];
 
@@ -123,7 +123,7 @@ function rowsToWords(rows) {
         word,
         meanings: [],
         importedProgress: hasProgressCols
-          ? { memorized: false, caution: false, important: false, checked: [] }
+          ? { memorized: false, important: false, checked: [] }
           : null,
       };
       words.push(entry);
@@ -134,9 +134,8 @@ function rowsToWords(rows) {
 
     if (hasProgressCols) {
       entry.importedProgress.memorized = isTruthyFlag(cols[4]);
-      entry.importedProgress.caution = isTruthyFlag(cols[5]);
-      entry.importedProgress.important = isTruthyFlag(cols[6]);
-      if (meaning || example) entry.importedProgress.checked.push(isTruthyFlag(cols[7]));
+      entry.importedProgress.important = isTruthyFlag(cols[5]);
+      if (meaning || example) entry.importedProgress.checked.push(isTruthyFlag(cols[6]));
     }
   }
 
@@ -166,15 +165,15 @@ function csvField(value) {
 
 // Inverse of parseCSVToWords: one row per {meaning, example} pair (or a
 // single blank-meaning row for words with no meanings recorded). Also
-// carries each word's study progress (memorized/caution/important, plus
-// per-meaning checked state) in trailing columns so the file can be
-// re-imported — on this device or another — with progress intact.
+// carries each word's study progress (memorized/important, plus per-meaning
+// checked state) in trailing columns so the file can be re-imported — on
+// this device or another — with progress intact.
 function wordsToCSV(words, progress) {
-  const lines = ['category,word,meaning,example,memorized,caution,important,checked'];
+  const lines = ['category,word,meaning,example,memorized,important,checked'];
   const flag = (b) => (b ? '1' : '0');
   for (const w of words) {
-    const p = (progress && progress[w.id]) || { memorized: false, caution: false, important: false, checked: [] };
-    const wordFlags = [flag(p.memorized), flag(p.caution), flag(p.important)];
+    const p = (progress && progress[w.id]) || { memorized: false, important: false, checked: [] };
+    const wordFlags = [flag(p.memorized), flag(p.important)];
     if (w.meanings.length === 0) {
       lines.push([csvField(w.category), csvField(w.word), '', '', ...wordFlags, ''].join(','));
       continue;
