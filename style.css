@@ -416,6 +416,7 @@ input {
   cursor: pointer;
   background: var(--panel-bg);
   box-shadow: var(--card-shadow);
+  touch-action: pan-y;
 }
 
 .word-card.focused {
@@ -432,6 +433,11 @@ input {
   flex-wrap: nowrap;
   overflow-x: auto;
   margin-bottom: 10px;
+  /* overflow-x:auto makes this its own scroll box, so without this it can
+     grab a horizontal touch drag as its own native pan regardless of the
+     card/feed's touch-action — that's what was swallowing swipes started
+     over the toggle buttons. */
+  touch-action: pan-y;
 }
 
 .count-widget {
@@ -601,6 +607,7 @@ input {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  touch-action: pan-y;
 }
 
 .meanings-placeholder,
