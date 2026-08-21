@@ -1,0 +1,1604 @@
+// Main application: state, rendering, event handling.
+// Relies on globals from csv.js and store.js (no bundler / plain <script> includes).
+
+const CARD_GAP = 12;
+const CARD_MIN_WIDTH = 270; // slider floor; also the default card width
+const CARD_MAX_WIDTH = CARD_MIN_WIDTH * 2;
+const CARD_MIN_HEIGHT = 200; // slider floor
+const CARD_MAX_HEIGHT = CARD_MIN_HEIGHT * 2;
+
+let words = loadWords();
+let progress = loadProgress();
+let settings = loadSettings();
+const ui = {
+  activeCategory: null, // null = all categories
+  filterMode: null, // null | 'unmemorized' | 'caution' | 'important'
+  startIndex: 0,
+  revealedIds: new Set(), // transient: which cards are "flipped" in test modes
+  focusedIndex: null, // index within current window; null = no card focused yet
+  exportOpen: false,
+  exportStatus: { all: true, unmemorized: false, caution: false, important: false },
+  exportCategories: null, // Set, lazily initialized when export panel opens
+  collapsedCategories: new Set(), // category names folded in the progress panel
+  shuffleActive: false,
+  shuffledIds: null, // word ids in shuffled order, snapshot of the filtered range at shuffle time
+  preShuffleStartIndex: 0, // restored when shuffle is toggled back off
+  fitWidthActive: false,
+  preFitCardWidth: null, // settings.cardWidth snapshot, restored when fit is toggled off
+  mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
+  mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
+};
+
+resyncProgress(words);
+
+// ---------- state helpers ----------
+
+function resyncProgress(list) {
+  let changed = false;
+  const seen = new Set();
+  for (const w of list) {
+    seen.add(w.id);
+
+    // A CSV carrying progress columns (e.g. exported from another device)
+    // always wins for words it names — that's the point of syncing.
+    if (w.importedProgress) {
+      const ip = w.importedProgress;
+      progress[w.id] = {
+        memorized: Boolean(ip.memorized),
+        caution: Boolean(ip.caution),
+        important: Boolean(ip.important),
+        checked: w.meanings.map((_, i) => Boolean(ip.checked[i])),
+      };
+      changed = true;
+      continue;
+    }
+
+    let p = progress[w.id];
+    if (!p) {
+      p = defaultProgressFor(w);
+      progress[w.id] = p;
+      changed = true;
+      continue;
+    }
+    if (!Array.isArray(p.checked) || p.checked.length !== w.meanings.length) {
+      p.checked = w.meanings.map((_, i) => Boolean(p.checked && p.checked[i]));
+      changed = true;
+    }
+  }
+  for (const id of Object.keys(progress)) {
+    if (!seen.has(id)) {
+      delete progress[id];
+      changed = true;
+    }
+  }
+  if (changed) saveProgress(progress);
+}
+
+function setWords(newWords) {
+  words = newWords;
+  resyncProgress(words);
+  saveWords(words);
+  ui.activeCategory = null;
+  ui.filterMode = null;
+  ui.exportCategories = null;
+  deactivateShuffle();
+  resetPaging();
+  render();
+}
+
+function getCategories() {
+  const seen = [];
+  const set = new Set();
+  for (const w of words) {
+    if (!set.has(w.category)) {
+      set.add(w.category);
+      seen.push(w.category);
+    }
+  }
+  return seen;
+}
+
+function isMemorized(word) {
+  const p = progress[word.id];
+  return Boolean(p && p.memorized);
+}
+
+function computeStats() {
+  const total = words.length;
+  const memorized = words.filter(isMemorized).length;
+  const unmemorized = total - memorized;
+  const caution = words.filter((w) => progress[w.id] && progress[w.id].caution).length;
+  const important = words.filter((w) => progress[w.id] && progress[w.id].important).length;
+
+  const byCategory = getCategories().map((cat) => {
+    const inCat = words.filter((w) => w.category === cat);
+    const memoInCat = inCat.filter(isMemorized).length;
+    return {
+      category: cat,
+      total: inCat.length,
+      memorized: memoInCat,
+      rate: inCat.length ? Math.round((memoInCat / inCat.length) * 100) : 0,
+      unmemorized: inCat.length - memoInCat,
+      caution: inCat.filter((w) => progress[w.id] && progress[w.id].caution).length,
+      important: inCat.filter((w) => progress[w.id] && progress[w.id].important).length,
+    };
+  });
+
+  return {
+    total,
+    memorized,
+    memoRate: total ? Math.round((memorized / total) * 100) : 0,
+    unmemorized,
+    caution,
+    important,
+    byCategory,
+  };
+}
+
+function matchesFilter(word, filter) {
+  const p = progress[word.id];
+  if (filter === 'unmemorized') return !p || !p.memorized;
+  if (filter === 'caution') return Boolean(p && p.caution);
+  if (filter === 'important') return Boolean(p && p.important);
+  return true;
+}
+
+function getFilteredWords() {
+  let list = words;
+  if (ui.activeCategory) list = list.filter((w) => w.category === ui.activeCategory);
+  if (ui.filterMode) list = list.filter((w) => matchesFilter(w, ui.filterMode));
+  return list;
+}
+
+// Filtered range, reordered per the active shuffle snapshot (if any). Stats
+// always read the plain word list / getFilteredWords(), never this — only
+// display order for the feed itself is affected by shuffling.
+function getDisplayWords() {
+  const filtered = getFilteredWords();
+  if (!ui.shuffleActive || !ui.shuffledIds) return filtered;
+  const byId = new Map(filtered.map((w) => [w.id, w]));
+  return ui.shuffledIds.map((id) => byId.get(id)).filter(Boolean);
+}
+
+function deactivateShuffle() {
+  ui.shuffleActive = false;
+  ui.shuffledIds = null;
+}
+
+function currentPageNumber() {
+  return Math.floor(ui.startIndex / settings.count) + 1;
+}
+
+function totalPageCount() {
+  return Math.max(1, Math.ceil(getDisplayWords().length / settings.count));
+}
+
+function gotoPage(pageNum) {
+  const total = totalPageCount();
+  const clamped = Math.max(1, Math.min(total, pageNum));
+  ui.startIndex = (clamped - 1) * settings.count;
+  ui.revealedIds.clear();
+  ui.focusedIndex = null;
+  render();
+}
+
+function jumpToWordOrdinal(n) {
+  const filtered = getDisplayWords();
+  if (!Number.isFinite(n) || filtered.length === 0) return;
+  const clamped = Math.max(1, Math.min(filtered.length, Math.floor(n)));
+  const index = clamped - 1;
+  ui.startIndex = Math.floor(index / settings.count) * settings.count;
+  ui.focusedIndex = index - ui.startIndex;
+  ui.revealedIds.clear();
+  render();
+}
+
+function toggleShuffle() {
+  if (ui.shuffleActive) {
+    ui.startIndex = ui.preShuffleStartIndex || 0;
+    deactivateShuffle();
+  } else {
+    const ids = getFilteredWords().map((w) => w.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = ids[i];
+      ids[i] = ids[j];
+      ids[j] = tmp;
+    }
+    ui.shuffledIds = ids;
+    ui.preShuffleStartIndex = ui.startIndex;
+    ui.shuffleActive = true;
+    ui.startIndex = 0;
+  }
+  ui.revealedIds.clear();
+  ui.focusedIndex = null;
+  render();
+}
+
+function clampStartIndex(filteredLen) {
+  if (filteredLen === 0) {
+    ui.startIndex = 0;
+    return;
+  }
+  if (ui.startIndex > filteredLen - 1) ui.startIndex = Math.max(0, filteredLen - 1);
+  if (ui.startIndex < 0) ui.startIndex = 0;
+}
+
+function resetPaging() {
+  ui.startIndex = 0;
+  ui.revealedIds.clear();
+  ui.focusedIndex = null;
+}
+
+// ---------- rendering ----------
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const CIRCLED_NUMBERS = [
+  '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
+  '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
+];
+function circledNumber(n) {
+  return CIRCLED_NUMBERS[n - 1] || `(${n})`;
+}
+
+const DICT_SEARCH_ICON =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+
+function render() {
+  document.body.classList.toggle('dark', settings.darkMode);
+  document.getElementById('app').classList.toggle('full-width', settings.widthMode === 'full');
+
+  const fontDef = FONT_OPTIONS.find((f) => f.value === settings.font) || FONT_OPTIONS[0];
+  document.documentElement.style.setProperty('--card-font-family', fontDef.stack);
+  document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
+  document.documentElement.style.setProperty('--card-font-weight', settings.bold ? '700' : '400');
+
+  const filtered = getDisplayWords();
+  clampStartIndex(filtered.length);
+  const windowWords = filtered.slice(ui.startIndex, ui.startIndex + settings.count);
+  if (ui.focusedIndex !== null && ui.focusedIndex >= windowWords.length) {
+    ui.focusedIndex = windowWords.length ? windowWords.length - 1 : null;
+  }
+
+  const progressW = settings.progressCollapsed ? 40 : settings.progressWidth || 260;
+  const app = document.getElementById('app');
+
+  // #app is sized to whichever is larger: the classic ~1200px default
+  // (kept for readability at typical column counts) or whatever `cols`
+  // cards actually need at the current card width (so more columns, or a
+  // wider manual card-width setting, can widen the layout instead of
+  // squeezing cards below a usable width) — capped at the viewport so it
+  // never forces page-level horizontal scroll, and centered via
+  // margin:auto. Setting an explicit width here (rather than relying on
+  // CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing quirks
+  // that didn't reliably propagate the card grid's width up through
+  // .main / .feed-nav in testing — with a definite width the grid's own
+  // tracks size normally.
+  if (settings.widthMode === 'full') {
+    app.style.width = '';
+  } else {
+    // +4px: measured empirically — the .cards padding/negative-margin trick
+    // (for focus-ring room) resolves a couple px tighter in practice than
+    // the arithmetic below predicts, and without slack from the 1200px
+    // floor to absorb it, the grid can end up ~2px wider than its
+    // container and trigger a horizontal scrollbar.
+    const cardsWidth = settings.cols * settings.cardWidth + (settings.cols - 1) * CARD_GAP + 4;
+    const feedPanelWidth = cardsWidth + 16 * 2; // feed-panel padding
+    const mainWidth = feedPanelWidth + 16 + 10 + 16 + progressW; // main gaps + handle
+    const appWidth = mainWidth + 16 * 2; // #app padding
+    const targetWidth = Math.max(appWidth, 1200);
+    // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
+    // initial containing block and in practice doesn't subtract the
+    // vertical scrollbar's own width, so a vw-based cap can still let the
+    // app render a few px wider than what's actually available, which is
+    // exactly enough to trigger a horizontal scrollbar. clientWidth is a
+    // real post-layout measurement that already excludes the scrollbar.
+    const viewportCap = document.documentElement.clientWidth - 24;
+    app.style.width = Math.min(targetWidth, viewportCap) + 'px';
+  }
+  app.innerHTML =
+    renderMobileTopBar() +
+    renderToolbar() +
+    `<div class="main" style="--progress-w: ${progressW}px;">` +
+    renderFeedPanel(filtered, windowWords) +
+    (settings.progressCollapsed ? '' : renderResizeHandle('resize-progress', 'v')) +
+    renderProgressPanel() +
+    '</div>' +
+    renderMobileDrawer() +
+    (ui.exportOpen ? renderExportPanel() : '');
+}
+
+function renderMobileTopBar() {
+  return `
+  <div class="mobile-topbar">
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">☰</button>
+    <span class="mobile-topbar-title">단어장</span>
+  </div>`;
+}
+
+function renderMobileDrawer() {
+  if (!ui.mobileDrawerOpen) return '';
+  const body = ui.mobileDrawerView === 'settings' ? renderMobileSettingsView() : renderMobileProgressView();
+  return `
+  <div class="mobile-drawer-backdrop" data-action="close-mobile-drawer">
+    <aside class="mobile-drawer">${body}</aside>
+  </div>`;
+}
+
+function renderMobileProgressView() {
+  const stats = computeStats();
+
+  const filterRow = (label, key) => `
+    <div class="stat-row clickable ${ui.filterMode === key && !ui.activeCategory ? 'active' : ''}" data-action="stat-filter" data-filter="${key}">
+      <span>${label}</span>
+      <span>${stats[key]}개</span>
+    </div>`;
+
+  const perCategoryHtml = stats.byCategory
+    .map((c) => {
+      const subRow = (label, key) => {
+        const isActive = ui.activeCategory === c.category && ui.filterMode === key;
+        return `<div class="cat-sub-row ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
+          c.category
+        )}" data-filter="${key}"><span>${label}</span><span>${c[key]}개</span></div>`;
+      };
+      const collapsed = ui.collapsedCategories.has(c.category);
+      return `
+      <div class="cat-stat">
+        <div class="cat-stat-header">
+          <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
+        c.category
+      )}" aria-label="접기/펼치기">▾</button>
+          <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
+        c.category
+      )}</span>
+          <span class="cat-stat-rate">${c.rate}%</span>
+        </div>
+        ${
+          collapsed
+            ? ''
+            : `${subRow('미암기', 'unmemorized')}${subRow('주의', 'caution')}${subRow('중요', 'important')}`
+        }
+      </div>`;
+    })
+    .join('');
+
+  const allActive = !ui.filterMode && !ui.activeCategory;
+
+  return `
+    <div class="drawer-header">
+      진행률
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+    </div>
+    <div class="stat-row static">
+      <span>전체 개수</span>
+      <span>${stats.total}개</span>
+    </div>
+    <div class="stat-row static">
+      <span>암기율</span>
+      <span><small>${stats.total}개 중 ${stats.memorized}개</small> ${stats.memoRate}%</span>
+    </div>
+    <div class="stat-row clickable ${allActive ? 'active' : ''}" data-action="tab" data-category="">
+      <span>전체 보기</span>
+    </div>
+    ${filterRow('미암기', 'unmemorized')}
+    ${filterRow('주의', 'caution')}
+    ${filterRow('중요', 'important')}
+    <div class="cat-stats">${perCategoryHtml}</div>
+    <button class="drawer-settings-btn" data-action="open-mobile-settings">⚙ 설정</button>
+  `;
+}
+
+function renderMobileSettingsView() {
+  const fontOptionsHtml = FONT_OPTIONS.map(
+    (f) =>
+      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
+        f.label
+      )}</option>`
+  ).join('');
+
+  const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
+  const modeOptionsHtml = Object.keys(modeLabels)
+    .map(
+      (m) =>
+        `<option value="${m}" ${m === settings.mode ? 'selected' : ''}>${escapeHtml(
+          modeLabels[m]
+        )}</option>`
+    )
+    .join('');
+
+  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
+  const widthOptionsHtml = Object.keys(widthLabels)
+    .map(
+      (m) =>
+        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
+          widthLabels[m]
+        )}</option>`
+    )
+    .join('');
+
+  return `
+    <div class="drawer-header">
+      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">←</button>
+      설정
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">데이터</div>
+      <button class="btn btn-open" data-action="open-csv">열기</button>
+      <button class="btn" data-action="open-export">내보내기</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">화면</div>
+      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
+      <label class="opt">
+        폰트
+        <select data-action="select-font">${fontOptionsHtml}</select>
+      </label>
+      ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+      <button class="chip-btn ${settings.bold ? 'active' : ''}" data-action="toggle-bold">굵게</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">레이아웃</div>
+      <label class="opt">
+        레이아웃
+        <select data-action="select-width">${widthOptionsHtml}</select>
+      </label>
+      <label class="opt">
+        모드
+        <select data-action="select-mode">${modeOptionsHtml}</select>
+      </label>
+      ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
+      ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
+      ${sliderControl('카드 가로', settings.cardWidth, CARD_MIN_WIDTH, Math.max(CARD_MAX_WIDTH, settings.cardWidth), 'card-width-slider')}
+      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
+      <button class="chip-btn ${ui.fitWidthActive ? 'active' : ''}" data-action="fit-card-width">가로 맞춤</button>
+    </div>
+  `;
+}
+
+function renderResizeHandle(action, orientation) {
+  return `<div class="resize-handle resize-${orientation}" data-action="${action}" title="드래그하여 크기 조절"></div>`;
+}
+
+function renderToolbar() {
+  const fontOptionsHtml = FONT_OPTIONS.map(
+    (f) =>
+      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
+        f.label
+      )}</option>`
+  ).join('');
+
+  const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
+  const modeOptionsHtml = Object.keys(modeLabels)
+    .map(
+      (m) =>
+        `<option value="${m}" ${m === settings.mode ? 'selected' : ''}>${escapeHtml(
+          modeLabels[m]
+        )}</option>`
+    )
+    .join('');
+
+  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
+  const widthOptionsHtml = Object.keys(widthLabels)
+    .map(
+      (m) =>
+        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
+          widthLabels[m]
+        )}</option>`
+    )
+    .join('');
+
+  const toolbarStyle = settings.toolbarHeight
+    ? `style="height:${settings.toolbarHeight}px;overflow-y:auto;"`
+    : '';
+
+  if (settings.toolbarCollapsed) {
+    return `
+  <div class="toolbar collapsed">
+    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">▾ 설정</button>
+  </div>`;
+  }
+
+  return `
+  <div class="toolbar">
+    <div class="toolbar-row" ${toolbarStyle}>
+      <button class="btn btn-open" data-action="open-csv">열기</button>
+      <button class="btn" data-action="open-export">내보내기</button>
+      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
+      <label class="opt">
+        폰트
+        <select data-action="select-font">${fontOptionsHtml}</select>
+      </label>
+      ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+      <button class="chip-btn ${settings.bold ? 'active' : ''}" data-action="toggle-bold">굵게</button>
+      <label class="opt">
+        레이아웃
+        <select data-action="select-width">${widthOptionsHtml}</select>
+      </label>
+      <label class="opt">
+        모드
+        <select data-action="select-mode">${modeOptionsHtml}</select>
+      </label>
+      ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
+      ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
+      ${sliderControl('카드 가로', settings.cardWidth, CARD_MIN_WIDTH, Math.max(CARD_MAX_WIDTH, settings.cardWidth), 'card-width-slider')}
+      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
+      <button class="chip-btn ${ui.fitWidthActive ? 'active' : ''}" data-action="fit-card-width">가로 맞춤</button>
+      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">▴ 접기</button>
+    </div>
+    ${renderResizeHandle('resize-toolbar', 'h')}
+  </div>`;
+}
+
+function sliderControl(label, value, min, max, action) {
+  return `
+      <label class="opt slider-opt">
+        ${label}
+        <input type="range" min="${min}" max="${max}" step="1" value="${value}" data-action="${action}" />
+        <span class="stepper-value">${value}</span>
+      </label>`;
+}
+
+function stepperControl(label, value, decAction, incAction) {
+  return `
+      <label class="opt">
+        ${label}
+        <span class="stepper">
+          <button data-action="${decAction}" aria-label="${label} 줄이기">−</button>
+          <span class="stepper-value">${value}</span>
+          <button data-action="${incAction}" aria-label="${label} 키우기">+</button>
+        </span>
+      </label>`;
+}
+
+function renderFeedPanel(filtered, windowWords) {
+  const currentCategoryLabel = ui.activeCategory || '전체';
+
+  const positionText = filtered.length
+    ? `${filtered.length}개 중 ${ui.startIndex + 1}번째`
+    : words.length
+    ? '표시할 단어가 없습니다'
+    : 'CSV 파일을 불러오세요';
+
+  const cardsHtml = windowWords.map((w, i) => renderCard(w, i, i === ui.focusedIndex)).join('');
+
+  const paginationBar = renderPaginationBar(filtered.length);
+
+  return `
+  <section class="feed-panel">
+    <div class="feed-header-row">
+      <div class="feed-header">단어장 피드</div>
+      <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
+      <span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>
+    </div>
+    <div class="position-indicator">${positionText}</div>
+    <div class="feed-nav-row">
+      ${renderJumpBox(filtered.length)}
+      ${paginationBar}
+    </div>
+    <div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${settings.cardWidth}px);">${
+    cardsHtml || '<div class="cards-empty">단어가 없습니다</div>'
+  }</div>
+    <div class="feed-nav-row">
+      ${paginationBar}
+    </div>
+  </section>`;
+}
+
+function renderJumpBox(filteredLen) {
+  return `
+  <div class="jump-box">
+    <input type="number" class="jump-input" min="1" max="${
+      filteredLen || 1
+    }" placeholder="번호" data-action="jump-input" aria-label="단어 순번으로 이동" />
+  </div>`;
+}
+
+function renderPaginationBar(filteredLen) {
+  const totalPages = Math.max(1, Math.ceil(filteredLen / settings.count));
+  const currentPage = Math.min(totalPages, currentPageNumber());
+
+  const windowSize = 10;
+  let startPage = Math.max(1, currentPage - Math.floor(windowSize / 2));
+  let endPage = Math.min(totalPages, startPage + windowSize - 1);
+  startPage = Math.max(1, endPage - windowSize + 1);
+
+  let pageButtons = '';
+  for (let p = startPage; p <= endPage; p++) {
+    pageButtons += `<button class="page-num-btn ${
+      p === currentPage ? 'current' : ''
+    }" data-action="goto-page" data-page="${p}">${p}</button>`;
+  }
+
+  const atFirst = currentPage <= 1;
+  const atLast = currentPage >= totalPages;
+
+  return `
+  <div class="pagination-bar">
+    <button class="page-nav-btn" data-action="page-first" ${
+      atFirst ? 'disabled' : ''
+    } aria-label="맨 처음 페이지">⏮</button>
+    <button class="page-nav-btn" data-action="page-back5" ${
+      atFirst ? 'disabled' : ''
+    } aria-label="5페이지 뒤로">⏪</button>
+    <button class="page-nav-btn" data-action="page-prev" ${
+      atFirst ? 'disabled' : ''
+    } aria-label="이전 페이지">◀</button>
+    <div class="page-num-list">${pageButtons}</div>
+    <button class="page-nav-btn" data-action="page-next" ${
+      atLast ? 'disabled' : ''
+    } aria-label="다음 페이지">▶</button>
+    <button class="page-nav-btn" data-action="page-fwd5" ${
+      atLast ? 'disabled' : ''
+    } aria-label="5페이지 앞으로">⏩</button>
+    <button class="page-nav-btn" data-action="page-last" ${
+      atLast ? 'disabled' : ''
+    } aria-label="맨 마지막 페이지">⏭</button>
+  </div>`;
+}
+
+function renderCard(word, index, focused) {
+  const p = progress[word.id] || defaultProgressFor(word);
+  const revealed = ui.revealedIds.has(word.id) || settings.mode === 'memorize';
+
+  const wordVisible = settings.mode !== 'word-test' || revealed;
+  const meaningsVisible = settings.mode !== 'meaning-test' || revealed;
+
+  const dictUrl = 'https://dict.naver.com/dict.search?query=' + encodeURIComponent(word.word);
+  const wordHtml = wordVisible
+    ? `<div class="card-word"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+        word.word
+      )}</span><a class="dict-link" href="${escapeHtml(
+        dictUrl
+      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${DICT_SEARCH_ICON}</a></div>`
+    : `<div class="card-word placeholder">탭하여 단어 보기</div>`;
+
+  let meaningsHtml;
+  if (meaningsVisible) {
+    meaningsHtml = word.meanings.length
+      ? word.meanings
+          .map((m, i) => {
+            const checked = Boolean(p.checked[i]);
+            return `
+            <div class="meaning-item ${checked ? 'checked' : ''}">
+              <button class="check-btn ${checked ? 'checked' : ''}" data-action="toggle-checked" data-id="${escapeHtml(
+                word.id
+              )}" data-index="${i}" aria-label="${circledNumber(i + 1)}번 뜻 암기 확인">${circledNumber(
+                i + 1
+              )}</button>
+              <div class="meaning-text">
+                ${m.meaning ? `<div class="meaning">${escapeHtml(m.meaning)}</div>` : ''}
+                ${m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
+              </div>
+            </div>`;
+          })
+          .join('')
+      : '<div class="meaning-empty">등록된 뜻이 없습니다</div>';
+  } else {
+    meaningsHtml = `<div class="meanings-placeholder">탭하여 뜻과 예시 보기</div>`;
+  }
+
+  return `
+  <div class="word-card ${focused ? 'focused' : ''}" data-action="card-reveal" data-id="${escapeHtml(
+    word.id
+  )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+    <div class="card-toggles">
+      <div class="count-widget">
+        <button class="count-btn count-up" data-action="word-count-inc" data-id="${escapeHtml(
+          word.id
+        )}" aria-label="카운트 증가">▲</button>
+        <span class="count-value">${p.count || 0}</span>
+        <button class="count-btn count-down" data-action="word-count-dec" data-id="${escapeHtml(
+          word.id
+        )}" aria-label="카운트 감소">▼</button>
+      </div>
+      <button class="memo-toggle ${p.memorized ? 'memorized' : ''}" data-action="toggle-memorized" data-id="${escapeHtml(
+    word.id
+  )}">
+        <span class="memo-option">미암기</span><span class="memo-option">암기</span>
+      </button>
+      <button class="pill-toggle caution ${p.caution ? 'active' : ''}" data-action="toggle-caution" data-id="${escapeHtml(
+    word.id
+  )}">주의</button>
+      <button class="pill-toggle important ${p.important ? 'active' : ''}" data-action="toggle-important" data-id="${escapeHtml(
+    word.id
+  )}">중요</button>
+    </div>
+    ${wordHtml}
+    <div class="card-meanings">${meaningsHtml}</div>
+  </div>`;
+}
+
+function renderProgressPanel() {
+  const stats = computeStats();
+
+  const filterRow = (label, key) => `
+    <div class="stat-row clickable ${ui.filterMode === key && !ui.activeCategory ? 'active' : ''}" data-action="stat-filter" data-filter="${key}">
+      <span>${label}</span>
+      <span>${stats[key]}개</span>
+    </div>`;
+
+  const perCategoryHtml = stats.byCategory
+    .map((c) => {
+      const subRow = (label, key) => {
+        const isActive = ui.activeCategory === c.category && ui.filterMode === key;
+        return `<div class="cat-sub-row ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
+          c.category
+        )}" data-filter="${key}"><span>${label}</span><span>${c[key]}개</span></div>`;
+      };
+      const collapsed = ui.collapsedCategories.has(c.category);
+      return `
+      <div class="cat-stat">
+        <div class="cat-stat-header">
+          <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
+        c.category
+      )}" aria-label="접기/펼치기">▾</button>
+          <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
+        c.category
+      )}</span>
+          <span class="cat-stat-rate">${c.rate}%</span>
+        </div>
+        ${
+          collapsed
+            ? ''
+            : `${subRow('미암기', 'unmemorized')}${subRow('주의', 'caution')}${subRow('중요', 'important')}`
+        }
+      </div>`;
+    })
+    .join('');
+
+  if (settings.progressCollapsed) {
+    return `
+  <aside class="progress-panel collapsed">
+    <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 펼치기">◂</button>
+  </aside>`;
+  }
+
+  return `
+  <aside class="progress-panel">
+    <div class="progress-header">
+      진행률
+      <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 접기">▸</button>
+    </div>
+    <div class="stat-row static">
+      <span>전체 개수</span>
+      <span>${stats.total}개</span>
+    </div>
+    <div class="stat-row static">
+      <span>암기율</span>
+      <span><small>${stats.total}개 중 ${stats.memorized}개</small> ${stats.memoRate}%</span>
+    </div>
+    <div class="stat-row clickable ${!ui.filterMode && !ui.activeCategory ? 'active' : ''}" data-action="tab" data-category="">
+      <span>전체 보기</span>
+    </div>
+    ${filterRow('미암기', 'unmemorized')}
+    ${filterRow('주의', 'caution')}
+    ${filterRow('중요', 'important')}
+    <div class="cat-stats">${perCategoryHtml}</div>
+  </aside>`;
+}
+
+function renderExportPanel() {
+  const categories = getCategories();
+  if (!ui.exportCategories) ui.exportCategories = new Set(categories);
+
+  const s = ui.exportStatus;
+  const statusButton = (label, key) =>
+    `<button class="chip-btn ${s[key] ? 'active' : ''}" data-action="export-status" data-status="${key}">${label}</button>`;
+
+  const allCatsChecked = categories.length > 0 && categories.every((c) => ui.exportCategories.has(c));
+  const categoryCheckboxes =
+    `<button class="chip-btn ${allCatsChecked ? 'active' : ''}" data-action="export-category-all">전체 선택</button>` +
+    categories
+      .map(
+        (c) =>
+          `<button class="chip-btn ${
+            ui.exportCategories.has(c) ? 'active' : ''
+          }" data-action="export-category" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+      )
+      .join('');
+
+  const matchCount = getExportMatches().length;
+
+  return `
+  <div class="modal-backdrop" data-action="close-export">
+    <div class="modal">
+      <div class="modal-header">
+        내보내기
+        <button class="modal-close" data-action="close-export">×</button>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">진행 상황</div>
+        <div class="chip-group">
+          ${statusButton('전체', 'all')}
+          ${statusButton('미암기', 'unmemorized')}
+          ${statusButton('주의', 'caution')}
+          ${statusButton('중요단어', 'important')}
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">단어 분류</div>
+        <div class="chip-group">
+          ${categoryCheckboxes || '<div class="modal-empty">불러온 단어가 없습니다</div>'}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="export-count-preview">${matchCount}개 단어 내보내기</span>
+        <button class="btn btn-primary" data-action="do-export">내보내기</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function getExportMatches() {
+  const s = ui.exportStatus;
+  const cats = ui.exportCategories || new Set(getCategories());
+  return words.filter((w) => {
+    if (!cats.has(w.category)) return false;
+    if (s.all) return true;
+    if (!s.unmemorized && !s.caution && !s.important) return false;
+    const p = progress[w.id];
+    if (s.unmemorized && (!p || !p.memorized)) return true;
+    if (s.caution && p && p.caution) return true;
+    if (s.important && p && p.important) return true;
+    return false;
+  });
+}
+
+function doExport() {
+  const matches = getExportMatches();
+  if (matches.length === 0) {
+    alert('내보낼 단어가 없습니다.');
+    return;
+  }
+  const csv = wordsToCSV(matches, progress);
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const filename = `단어장_내보내기_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(
+    now.getDate()
+  )}_${pad(now.getHours())}${pad(now.getMinutes())}.csv`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  ui.exportOpen = false;
+  render();
+}
+
+// ---------- resize handles ----------
+
+function startResize(kind, startEvent) {
+  startEvent.preventDefault();
+  // On touch, capturing the pointer to the handle keeps move/up events
+  // targeted at this drag even if the finger strays off the thin strip —
+  // touch contact points are far less precise than a mouse cursor.
+  if (startEvent.target && startEvent.target.setPointerCapture) {
+    try {
+      startEvent.target.setPointerCapture(startEvent.pointerId);
+    } catch (err) {
+      // ignore — capture is a reliability nicety, not a requirement
+    }
+  }
+  const startX = startEvent.clientX;
+  const startY = startEvent.clientY;
+
+  const toolbarRow = document.querySelector('.toolbar-row');
+  const mainEl = document.querySelector('.main');
+  const progressPanel = document.querySelector('.progress-panel');
+
+  const startToolbarH = (toolbarRow && toolbarRow.getBoundingClientRect().height) || 56;
+  const startProgressW = (progressPanel && progressPanel.getBoundingClientRect().width) || 260;
+
+  let pending = null;
+
+  function onMove(e) {
+    if (kind === 'resize-toolbar') {
+      const newH = Math.max(56, Math.min(400, startToolbarH + (e.clientY - startY)));
+      if (toolbarRow) {
+        toolbarRow.style.height = newH + 'px';
+        toolbarRow.style.overflowY = 'auto';
+      }
+      pending = newH;
+    } else if (kind === 'resize-progress') {
+      const newW = Math.max(180, Math.min(520, startProgressW - (e.clientX - startX)));
+      if (mainEl) mainEl.style.setProperty('--progress-w', newW + 'px');
+      pending = newW;
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    if (pending == null) return;
+    if (kind === 'resize-toolbar') settings.toolbarHeight = Math.round(pending);
+    if (kind === 'resize-progress') settings.progressWidth = Math.round(pending);
+    saveSettings(settings);
+    render();
+  }
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+}
+
+// ---------- events ----------
+
+document.getElementById('csv-file-input').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const text = decodeCSVBuffer(reader.result);
+      const parsed = parseCSVToWords(text);
+      setWords(parsed);
+    } catch (err) {
+      alert('CSV를 읽는 중 오류가 발생했습니다: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+document.getElementById('app').addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('[data-action^="resize-"]');
+  if (handle) {
+    startResize(handle.getAttribute('data-action'), e);
+  }
+});
+
+document.getElementById('app').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('[data-action="jump-input"]')) {
+    jumpToWordOrdinal(Number(e.target.value));
+    e.target.value = '';
+    e.target.blur();
+  }
+});
+
+document.getElementById('app').addEventListener('click', (e) => {
+  // Card focus: clicking anywhere inside a word-card focuses it; clicking
+  // outside every card (toolbar, progress panel, feed chrome/background)
+  // clears focus. Whichever branch below ends up handling the click will
+  // render with this updated focus already applied; if nothing else
+  // matches, the fallback render() at the bottom picks it up.
+  const cardEl = e.target.closest('.word-card');
+  const newFocus = cardEl ? Number(cardEl.getAttribute('data-index')) : null;
+  const focusChanged = newFocus !== ui.focusedIndex;
+  ui.focusedIndex = newFocus;
+
+  // exact-target checks (must not fire when clicking descendants)
+  if (e.target.dataset && e.target.dataset.action === 'close-export') {
+    ui.exportOpen = false;
+    render();
+    return;
+  }
+
+  if (e.target.dataset && e.target.dataset.action === 'close-mobile-drawer') {
+    ui.mobileDrawerOpen = false;
+    render();
+    return;
+  }
+
+  const openBtn = e.target.closest('[data-action="open-csv"]');
+  if (openBtn) {
+    document.getElementById('csv-file-input').click();
+    return;
+  }
+
+  const openExport = e.target.closest('[data-action="open-export"]');
+  if (openExport) {
+    if (!ui.exportCategories) ui.exportCategories = new Set(getCategories());
+    ui.exportOpen = true;
+    render();
+    return;
+  }
+
+  const shuffleBtn = e.target.closest('[data-action="toggle-shuffle"]');
+  if (shuffleBtn) {
+    toggleShuffle();
+    return;
+  }
+
+  const doExportBtn = e.target.closest('[data-action="do-export"]');
+  if (doExportBtn) {
+    doExport();
+    return;
+  }
+
+  const fontDec = e.target.closest('[data-action="font-size-dec"]');
+  if (fontDec) {
+    settings.fontSize = Math.max(10, settings.fontSize - 1);
+    saveSettings(settings);
+    render();
+    return;
+  }
+  const fontInc = e.target.closest('[data-action="font-size-inc"]');
+  if (fontInc) {
+    settings.fontSize = Math.min(32, settings.fontSize + 1);
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const colsDec = e.target.closest('[data-action="cols-dec"]');
+  if (colsDec) {
+    settings.cols = Math.max(1, settings.cols - 1);
+    saveSettings(settings);
+    resetPaging();
+    render();
+    return;
+  }
+  const colsInc = e.target.closest('[data-action="cols-inc"]');
+  if (colsInc) {
+    settings.cols = Math.min(5, settings.cols + 1);
+    saveSettings(settings);
+    resetPaging();
+    render();
+    return;
+  }
+
+  const countDec = e.target.closest('[data-action="count-dec"]');
+  if (countDec) {
+    settings.count = Math.max(1, settings.count - 1);
+    saveSettings(settings);
+    resetPaging();
+    render();
+    return;
+  }
+  const countInc = e.target.closest('[data-action="count-inc"]');
+  if (countInc) {
+    settings.count = Math.min(15, settings.count + 1);
+    saveSettings(settings);
+    resetPaging();
+    render();
+    return;
+  }
+
+  const fitCardWidth = e.target.closest('[data-action="fit-card-width"]');
+  if (fitCardWidth) {
+    if (ui.fitWidthActive) {
+      // toggle off: restore whatever width was in effect before fitting
+      settings.cardWidth = ui.preFitCardWidth != null ? ui.preFitCardWidth : settings.cardWidth;
+      ui.fitWidthActive = false;
+      ui.preFitCardWidth = null;
+      saveSettings(settings);
+      render();
+    } else {
+      const cardsEl = document.querySelector('.cards');
+      if (cardsEl) {
+        // floor (not round) guarantees cols*fit + gaps never exceeds the
+        // measured available width, so no residual horizontal scroll —
+        // only the minimum is enforced here, not the usual max, since the
+        // whole point is to fill the feed exactly even if that's wider
+        // than the slider's normal ceiling. clientWidth includes .cards'
+        // own 5px-per-side padding (added earlier so the focus ring isn't
+        // clipped), which isn't actually usable by the grid tracks, so
+        // that has to come off the available amount too.
+        const available = cardsEl.clientWidth - 14;
+        const rawFit = Math.floor((available - (settings.cols - 1) * CARD_GAP) / settings.cols);
+        ui.preFitCardWidth = settings.cardWidth;
+        settings.cardWidth = Math.max(CARD_MIN_WIDTH, rawFit);
+        ui.fitWidthActive = true;
+        saveSettings(settings);
+        render();
+      }
+    }
+    return;
+  }
+
+  const foldBtn = e.target.closest('[data-action="toggle-fold"]');
+  if (foldBtn) {
+    const cat = foldBtn.getAttribute('data-category');
+    if (ui.collapsedCategories.has(cat)) ui.collapsedCategories.delete(cat);
+    else ui.collapsedCategories.add(cat);
+    render();
+    return;
+  }
+
+  const toolbarCollapseBtn = e.target.closest('[data-action="toggle-toolbar-collapse"]');
+  if (toolbarCollapseBtn) {
+    settings.toolbarCollapsed = !settings.toolbarCollapsed;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const progressCollapseBtn = e.target.closest('[data-action="toggle-progress-collapse"]');
+  if (progressCollapseBtn) {
+    settings.progressCollapsed = !settings.progressCollapsed;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const openDrawerBtn = e.target.closest('[data-action="open-mobile-drawer"]');
+  if (openDrawerBtn) {
+    ui.mobileDrawerOpen = true;
+    ui.mobileDrawerView = 'progress';
+    render();
+    return;
+  }
+
+  const openMobileSettingsBtn = e.target.closest('[data-action="open-mobile-settings"]');
+  if (openMobileSettingsBtn) {
+    ui.mobileDrawerView = 'settings';
+    render();
+    return;
+  }
+
+  const backToProgressBtn = e.target.closest('[data-action="back-to-progress"]');
+  if (backToProgressBtn) {
+    ui.mobileDrawerView = 'progress';
+    render();
+    return;
+  }
+
+  const tab = e.target.closest('[data-action="tab"]');
+  if (tab) {
+    const cat = tab.getAttribute('data-category');
+    ui.activeCategory = cat || null;
+    ui.filterMode = null;
+    deactivateShuffle();
+    resetPaging();
+    render();
+    return;
+  }
+
+  const statFilter = e.target.closest('[data-action="stat-filter"]');
+  if (statFilter) {
+    const filter = statFilter.getAttribute('data-filter');
+    const alreadyActive = ui.filterMode === filter && !ui.activeCategory;
+    ui.filterMode = alreadyActive ? null : filter;
+    ui.activeCategory = null;
+    deactivateShuffle();
+    resetPaging();
+    render();
+    return;
+  }
+
+  const statCategoryFilter = e.target.closest('[data-action="stat-category-filter"]');
+  if (statCategoryFilter) {
+    const cat = statCategoryFilter.getAttribute('data-category');
+    const filter = statCategoryFilter.getAttribute('data-filter');
+    const alreadyActive = ui.activeCategory === cat && ui.filterMode === filter;
+    deactivateShuffle();
+    if (alreadyActive) {
+      ui.activeCategory = null;
+      ui.filterMode = null;
+    } else {
+      ui.activeCategory = cat;
+      ui.filterMode = filter;
+    }
+    resetPaging();
+    render();
+    return;
+  }
+
+  const gotoPageBtn = e.target.closest('[data-action="goto-page"]');
+  if (gotoPageBtn && !gotoPageBtn.disabled) {
+    gotoPage(Number(gotoPageBtn.getAttribute('data-page')));
+    return;
+  }
+  const pageFirst = e.target.closest('[data-action="page-first"]');
+  if (pageFirst && !pageFirst.disabled) {
+    gotoPage(1);
+    return;
+  }
+  const pageBack5 = e.target.closest('[data-action="page-back5"]');
+  if (pageBack5 && !pageBack5.disabled) {
+    gotoPage(currentPageNumber() - 5);
+    return;
+  }
+  const pagePrev = e.target.closest('[data-action="page-prev"]');
+  if (pagePrev && !pagePrev.disabled) {
+    gotoPage(currentPageNumber() - 1);
+    return;
+  }
+  const pageNext = e.target.closest('[data-action="page-next"]');
+  if (pageNext && !pageNext.disabled) {
+    gotoPage(currentPageNumber() + 1);
+    return;
+  }
+  const pageFwd5 = e.target.closest('[data-action="page-fwd5"]');
+  if (pageFwd5 && !pageFwd5.disabled) {
+    gotoPage(currentPageNumber() + 5);
+    return;
+  }
+  const pageLast = e.target.closest('[data-action="page-last"]');
+  if (pageLast && !pageLast.disabled) {
+    gotoPage(totalPageCount());
+    return;
+  }
+
+  const memoToggle = e.target.closest('[data-action="toggle-memorized"]');
+  if (memoToggle) {
+    const p = progress[memoToggle.getAttribute('data-id')];
+    if (p) {
+      p.memorized = !p.memorized;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const wordCountDec = e.target.closest('[data-action="word-count-dec"]');
+  if (wordCountDec) {
+    const p = progress[wordCountDec.getAttribute('data-id')];
+    if (p) {
+      p.count = Math.max(0, (p.count || 0) - 1);
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const wordCountInc = e.target.closest('[data-action="word-count-inc"]');
+  if (wordCountInc) {
+    const p = progress[wordCountInc.getAttribute('data-id')];
+    if (p) {
+      p.count = (p.count || 0) + 1;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const cautionToggle = e.target.closest('[data-action="toggle-caution"]');
+  if (cautionToggle) {
+    const p = progress[cautionToggle.getAttribute('data-id')];
+    if (p) {
+      p.caution = !p.caution;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const importantToggle = e.target.closest('[data-action="toggle-important"]');
+  if (importantToggle) {
+    const p = progress[importantToggle.getAttribute('data-id')];
+    if (p) {
+      p.important = !p.important;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const checkBtn = e.target.closest('[data-action="toggle-checked"]');
+  if (checkBtn) {
+    const id = checkBtn.getAttribute('data-id');
+    const index = Number(checkBtn.getAttribute('data-index'));
+    const p = progress[id];
+    if (p) {
+      p.checked[index] = !p.checked[index];
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  const darkBtn = e.target.closest('[data-action="toggle-dark"]');
+  if (darkBtn) {
+    settings.darkMode = !settings.darkMode;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const boldBtn = e.target.closest('[data-action="toggle-bold"]');
+  if (boldBtn) {
+    settings.bold = !settings.bold;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const exportStatusBtn = e.target.closest('[data-action="export-status"]');
+  if (exportStatusBtn) {
+    const key = exportStatusBtn.getAttribute('data-status');
+    ui.exportStatus[key] = !ui.exportStatus[key];
+    render();
+    return;
+  }
+
+  const exportCategoryAllBtn = e.target.closest('[data-action="export-category-all"]');
+  if (exportCategoryAllBtn) {
+    const categories = getCategories();
+    const allChecked = categories.length > 0 && categories.every((c) => ui.exportCategories.has(c));
+    ui.exportCategories = allChecked ? new Set() : new Set(categories);
+    render();
+    return;
+  }
+
+  const exportCategoryBtn = e.target.closest('[data-action="export-category"]');
+  if (exportCategoryBtn) {
+    const cat = exportCategoryBtn.getAttribute('data-category');
+    if (!ui.exportCategories) ui.exportCategories = new Set(getCategories());
+    if (ui.exportCategories.has(cat)) ui.exportCategories.delete(cat);
+    else ui.exportCategories.add(cat);
+    render();
+    return;
+  }
+
+  // clicks on remaining nested form controls (select/range, still native)
+  // are handled by the 'change' listener below — don't also flip the card
+  if (e.target.closest('label, input')) return;
+
+  const cardReveal = e.target.closest('[data-action="card-reveal"]');
+  if (cardReveal && settings.mode !== 'memorize') {
+    const id = cardReveal.getAttribute('data-id');
+    if (ui.revealedIds.has(id)) {
+      ui.revealedIds.delete(id);
+    } else {
+      ui.revealedIds.add(id);
+    }
+    render();
+    return;
+  }
+
+  // nothing else matched (e.g. blank click on toolbar/progress background) —
+  // still need to re-render if focus changed above
+  if (focusChanged) render();
+});
+
+// Clicks landing outside #app entirely (the side margins around the
+// centered layout) never reach the listener above — clear focus there too.
+// Runs in the CAPTURE phase, before the #app listener's own render() call
+// can replace the DOM out from under e.target — otherwise a click inside
+// #app would detach e.target from #app mid-event and be misread as
+// "outside" once bubbling reached this listener.
+document.addEventListener(
+  'click',
+  (e) => {
+    if (ui.focusedIndex !== null && !e.target.closest('#app')) {
+      ui.focusedIndex = null;
+      render();
+    }
+  },
+  true
+);
+
+document.getElementById('app').addEventListener('change', (e) => {
+  const fontSelect = e.target.closest('[data-action="select-font"]');
+  if (fontSelect) {
+    settings.font = fontSelect.value;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const widthSelect = e.target.closest('[data-action="select-width"]');
+  if (widthSelect) {
+    settings.widthMode = widthSelect.value;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const modeSelect = e.target.closest('[data-action="select-mode"]');
+  if (modeSelect) {
+    settings.mode = modeSelect.value;
+    saveSettings(settings);
+    ui.revealedIds.clear();
+    render();
+    return;
+  }
+
+  const cardWidthSlider = e.target.closest('[data-action="card-width-slider"]');
+  if (cardWidthSlider) {
+    settings.cardWidth = Number(cardWidthSlider.value);
+    ui.fitWidthActive = false; // manual override supersedes a previous fit
+    ui.preFitCardWidth = null;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const cardHeightSlider = e.target.closest('[data-action="card-height-slider"]');
+  if (cardHeightSlider) {
+    settings.cardHeight = Number(cardHeightSlider.value);
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+});
+
+// ---------- swipe paging (touch only, so mouse/trackpad use on PC is untouched) ----------
+
+(function setupSwipeNavigation() {
+  const SWIPE_MIN_DISTANCE = 70; // px — small drags/taps don't page, keeps it from feeling twitchy
+  const SWIPE_MAX_OFF_AXIS_RATIO = 0.6; // vertical drift allowed, relative to horizontal distance
+  const SWIPE_MAX_DURATION = 700; // ms — a slow drag reads as scrolling intent, not a swipe
+
+  let touch = null;
+  const appEl = document.getElementById('app');
+
+  appEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    if (!e.target.closest('.cards')) return;
+    touch = { x: e.clientX, y: e.clientY, t: Date.now() };
+  });
+
+  appEl.addEventListener('pointerup', (e) => {
+    if (!touch || e.pointerType !== 'touch') {
+      touch = null;
+      return;
+    }
+    const dx = e.clientX - touch.x;
+    const dy = e.clientY - touch.y;
+    const dt = Date.now() - touch.t;
+    touch = null;
+    if (dt > SWIPE_MAX_DURATION) return;
+    if (Math.abs(dx) < SWIPE_MIN_DISTANCE) return;
+    if (Math.abs(dy) > Math.abs(dx) * SWIPE_MAX_OFF_AXIS_RATIO) return;
+    if (dx < 0) {
+      if (currentPageNumber() < totalPageCount()) gotoPage(currentPageNumber() + 1);
+    } else if (currentPageNumber() > 1) {
+      gotoPage(currentPageNumber() - 1);
+    }
+  });
+
+  appEl.addEventListener('pointercancel', () => {
+    touch = null;
+  });
+})();
+
+// ---------- keyboard shortcuts ----------
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+    e.preventDefault();
+    ui.exportOpen = !ui.exportOpen;
+    if (ui.exportOpen && !ui.exportCategories) ui.exportCategories = new Set(getCategories());
+    render();
+    return;
+  }
+
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  const typing = activeTag === 'INPUT' || activeTag === 'SELECT' || activeTag === 'TEXTAREA';
+
+  if (ui.exportOpen) {
+    if (e.key === 'Escape') {
+      ui.exportOpen = false;
+      render();
+    }
+    return;
+  }
+
+  if (typing) return;
+
+  const filtered = getDisplayWords();
+  const windowWords = filtered.slice(ui.startIndex, ui.startIndex + settings.count);
+
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+  if ((e.ctrlKey || e.metaKey) && (key === 'ArrowRight' || key === 'ArrowLeft')) {
+    e.preventDefault();
+    if (key === 'ArrowRight') {
+      if (ui.startIndex + settings.count < filtered.length) {
+        ui.startIndex += settings.count;
+        ui.revealedIds.clear();
+        ui.focusedIndex = null;
+        render();
+      }
+    } else if (ui.startIndex > 0) {
+      ui.startIndex = Math.max(0, ui.startIndex - settings.count);
+      ui.revealedIds.clear();
+      ui.focusedIndex = null;
+      render();
+    }
+    return;
+  }
+
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(key)) {
+    if (windowWords.length === 0) return;
+    e.preventDefault();
+    if (ui.focusedIndex === null) {
+      ui.focusedIndex = 0;
+      render();
+      return;
+    }
+
+    // At the first/last card, left/right step across the page boundary
+    // instead of stopping — focuses the last card of the previous page,
+    // or the first card of the next page.
+    if ((key === 'ArrowLeft' || key === 'a') && ui.focusedIndex === 0) {
+      if (ui.startIndex > 0) {
+        ui.startIndex = Math.max(0, ui.startIndex - settings.count);
+        const newWindowLen = Math.min(settings.count, filtered.length - ui.startIndex);
+        ui.focusedIndex = Math.max(0, newWindowLen - 1);
+        ui.revealedIds.clear();
+        render();
+      }
+      return;
+    }
+    if ((key === 'ArrowRight' || key === 'd') && ui.focusedIndex === windowWords.length - 1) {
+      if (ui.startIndex + settings.count < filtered.length) {
+        ui.startIndex += settings.count;
+        ui.focusedIndex = 0;
+        ui.revealedIds.clear();
+        render();
+      }
+      return;
+    }
+
+    let delta = 0;
+    if (key === 'ArrowLeft' || key === 'a') delta = -1;
+    else if (key === 'ArrowRight' || key === 'd') delta = 1;
+    else if (key === 'ArrowUp' || key === 'w') delta = -settings.cols;
+    else if (key === 'ArrowDown' || key === 's') delta = settings.cols;
+    ui.focusedIndex = Math.max(0, Math.min(windowWords.length - 1, ui.focusedIndex + delta));
+    render();
+    return;
+  }
+
+  if (e.code === 'Space') {
+    if (ui.focusedIndex === null || windowWords.length === 0) return;
+    e.preventDefault();
+    const w = windowWords[ui.focusedIndex];
+    const p = w && progress[w.id];
+    if (p) {
+      p.memorized = !p.memorized;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  // Enter/Backspace no longer page — they adjust the focused word's count.
+  if (key === 'Enter') {
+    if (ui.focusedIndex === null || windowWords.length === 0) return;
+    e.preventDefault();
+    const w = windowWords[ui.focusedIndex];
+    const p = w && progress[w.id];
+    if (p) {
+      p.count = (p.count || 0) + 1;
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
+  if (key === 'Backspace') {
+    e.preventDefault();
+    if (ui.focusedIndex !== null && windowWords.length > 0) {
+      const w = windowWords[ui.focusedIndex];
+      const p = w && progress[w.id];
+      if (p) {
+        p.count = Math.max(0, (p.count || 0) - 1);
+        saveProgress(progress);
+        render();
+      }
+    }
+    return;
+  }
+});
+
+render();
+
+// ---------- PWA install-ability ----------
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // no-op: e.g. running over file:// or plain http — app still works,
+      // just without offline install support
+    });
+  });
+}
