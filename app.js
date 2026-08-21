@@ -102,6 +102,25 @@ function isMemorized(word) {
   return Boolean(p && p.memorized);
 }
 
+// Shared by every trigger for these two toggles — PC keyboard shortcuts
+// (Space/Enter) and mobile gestures (double-tap/long-press) alike, since
+// there's no longer a button in the card markup to hang a click handler on.
+function toggleMemorized(id) {
+  const p = progress[id];
+  if (!p) return;
+  p.memorized = !p.memorized;
+  saveProgress(progress);
+  render();
+}
+
+function toggleImportant(id) {
+  const p = progress[id];
+  if (!p) return;
+  p.important = !p.important;
+  saveProgress(progress);
+  render();
+}
+
 function computeStats() {
   const total = words.length;
   const memorized = words.filter(isMemorized).length;
@@ -717,16 +736,6 @@ function renderCard(word, index, focused) {
   <div class="word-card ${focused ? 'focused' : ''} ${p.memorized ? 'memorized' : ''}" data-action="card-reveal" data-id="${escapeHtml(
     word.id
   )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
-    <div class="card-toggles">
-      <button class="memo-toggle ${p.memorized ? 'memorized' : ''}" data-action="toggle-memorized" data-id="${escapeHtml(
-    word.id
-  )}">
-        <span class="memo-option">미암기</span><span class="memo-option">암기</span>
-      </button>
-      <button class="pill-toggle important ${p.important ? 'active' : ''}" data-action="toggle-important" data-id="${escapeHtml(
-    word.id
-  )}">중요</button>
-    </div>
     ${wordHtml}
     <div class="card-meanings">${meaningsHtml}</div>
   </div>`;
@@ -975,6 +984,10 @@ document.getElementById('app').addEventListener('pointerdown', (e) => {
 
 document.getElementById('app').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.matches('[data-action="jump-input"]')) {
+    // Without this, the same Enter keeps bubbling to the document-level
+    // shortcut handler below, which — now that Enter toggles 중요 — would
+    // immediately flip that flag on whatever word the jump just focused.
+    e.stopPropagation();
     jumpToWordOrdinal(Number(e.target.value));
     e.target.value = '';
     e.target.blur();
@@ -1236,28 +1249,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const memoToggle = e.target.closest('[data-action="toggle-memorized"]');
-  if (memoToggle) {
-    const p = progress[memoToggle.getAttribute('data-id')];
-    if (p) {
-      p.memorized = !p.memorized;
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
-  const importantToggle = e.target.closest('[data-action="toggle-important"]');
-  if (importantToggle) {
-    const p = progress[importantToggle.getAttribute('data-id')];
-    if (p) {
-      p.important = !p.important;
-      saveProgress(progress);
-      render();
-    }
-    return;
-  }
-
   const checkBtn = e.target.closest('[data-action="toggle-checked"]');
   if (checkBtn) {
     const id = checkBtn.getAttribute('data-id');
@@ -1438,6 +1429,83 @@ document.getElementById('app').addEventListener('change', (e) => {
   });
 })();
 
+// ---------- card gestures: double-tap = 암기, long-press = 중요 ----------
+// Mobile has no keyboard for the Space/Enter shortcuts below, so these
+// gestures are the touch equivalent — same two actions, different trigger.
+// Double-tap rides the browser's native dblclick synthesis from two quick
+// taps (works on mouse too, which is harmless — PC already has Space/Enter
+// for this). Long-press has no native event, so it's hand-rolled with a
+// timer that a real swipe/scroll cancels via the move-distance check.
+
+(function setupCardGestures() {
+  const appEl = document.getElementById('app');
+
+  appEl.addEventListener('dblclick', (e) => {
+    const card = e.target.closest('.word-card');
+    if (!card) return;
+    e.preventDefault();
+    toggleMemorized(card.getAttribute('data-id'));
+  });
+
+  const LONG_PRESS_MS = 550;
+  const MOVE_CANCEL_THRESHOLD = 10; // px — beyond this it's a drag/swipe, not a press
+
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  let pressedId = null;
+  let firedLongPress = false;
+
+  function clearPress() {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pressedId = null;
+  }
+
+  appEl.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('.word-card');
+    if (!card) return;
+    clearPress();
+    startX = e.clientX;
+    startY = e.clientY;
+    pressedId = card.getAttribute('data-id');
+    firedLongPress = false;
+    timer = setTimeout(() => {
+      timer = null;
+      firedLongPress = true;
+      toggleImportant(pressedId);
+    }, LONG_PRESS_MS);
+  });
+
+  appEl.addEventListener('pointermove', (e) => {
+    if (!pressedId) return;
+    if (Math.abs(e.clientX - startX) > MOVE_CANCEL_THRESHOLD || Math.abs(e.clientY - startY) > MOVE_CANCEL_THRESHOLD) {
+      clearPress();
+    }
+  });
+
+  appEl.addEventListener('pointerup', clearPress);
+  appEl.addEventListener('pointercancel', clearPress);
+
+  // Capture phase, so this runs before the big click handler further down —
+  // a long-press already toggled 중요; without this, the click that follows
+  // the pointerup would also flip the card's test-mode reveal state.
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!firedLongPress) return;
+      firedLongPress = false;
+      if (e.target.closest('.word-card')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    true
+  );
+})();
+
 // ---------- keyboard shortcuts ----------
 
 document.addEventListener('keydown', (e) => {
@@ -1531,12 +1599,15 @@ document.addEventListener('keydown', (e) => {
     if (ui.focusedIndex === null || windowWords.length === 0) return;
     e.preventDefault();
     const w = windowWords[ui.focusedIndex];
-    const p = w && progress[w.id];
-    if (p) {
-      p.memorized = !p.memorized;
-      saveProgress(progress);
-      render();
-    }
+    if (w) toggleMemorized(w.id);
+    return;
+  }
+
+  if (key === 'Enter') {
+    if (ui.focusedIndex === null || windowWords.length === 0) return;
+    e.preventDefault();
+    const w = windowWords[ui.focusedIndex];
+    if (w) toggleImportant(w.id);
     return;
   }
 

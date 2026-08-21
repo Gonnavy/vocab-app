@@ -15,7 +15,6 @@
   --success-soft: #e3faf0;
   --important: #cf8a13;
   --important-soft: #fdf0d5;
-  --muted-pill: #b7bccb;
   --checked-text: #9aa0a8;
   --card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
 }
@@ -32,7 +31,6 @@ body.dark {
   --success-soft: #1c3a30;
   --important: #f2ba3f;
   --important-soft: #453723;
-  --muted-pill: #4d5568;
   --checked-text: #6b7280;
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
@@ -431,88 +429,6 @@ input {
   position: relative;
   z-index: 2;
   box-shadow: 0 0 0 3px var(--accent), var(--card-shadow);
-}
-
-.card-toggles {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  margin-bottom: 10px;
-  /* overflow-x:auto makes this its own scroll box, so without this it can
-     grab a horizontal touch drag as its own native pan regardless of the
-     card/feed's touch-action — that's what was swallowing swipes started
-     over the toggle buttons. */
-  touch-action: pan-y;
-}
-
-.memo-toggle {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  overflow: hidden;
-  cursor: pointer;
-  padding: 2px;
-  background: var(--bg);
-}
-
-.memo-option {
-  padding: 4px 9px;
-  font-size: clamp(10px, 0.85em, 14px);
-  font-weight: 600;
-  border-radius: 999px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  z-index: 1;
-  position: relative;
-}
-
-.memo-toggle::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  height: calc(100% - 4px);
-  background: var(--muted-pill);
-  border-radius: 999px;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.memo-toggle:not(.memorized) .memo-option:first-child {
-  color: #fff;
-}
-
-.memo-toggle.memorized::before {
-  transform: translateX(100%);
-  background: var(--success);
-}
-
-.memo-toggle.memorized .memo-option:last-child {
-  color: #fff;
-}
-
-.pill-toggle {
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-muted);
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: clamp(10px, 0.85em, 14px);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.pill-toggle.important.active {
-  background: var(--important);
-  border-color: var(--important);
-  color: #fff;
 }
 
 .card-word {
@@ -1055,19 +971,6 @@ input {
     z-index: auto;
   }
 
-  /* 암기/중요 toggles are supporting controls, not the content — headword
-     and meaning are. Shrink them and tighten the gap above the headword so
-     the row reads as a compact status strip instead of competing for
-     attention with the actual content underneath. */
-  .card-toggles {
-    margin-bottom: 6px;
-  }
-  .memo-option {
-    padding: 3px 8px;
-  }
-  .pill-toggle {
-    padding: 3px 10px;
-  }
 }
 
 @media (orientation: portrait) and (max-width: 560px) {
