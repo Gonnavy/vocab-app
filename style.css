@@ -1054,6 +1054,14 @@ input {
     z-index: auto;
   }
 
+  /* long-press now means "toggle 중요" — without this, the same press also
+     reads as "select this text" to the browser and pops its native
+     selection/callout menu (copy/share/translate/...) right on top of it */
+  .word-card {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 }
 
 @media (orientation: portrait) and (max-width: 560px) {

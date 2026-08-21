@@ -1619,7 +1619,21 @@ function renderPreservingSearchFocus() {
   }
 }
 
+// Korean (and other IME) input composes a syllable block from several
+// keystrokes before it's "committed" — re-rendering mid-composition tears
+// out the input element the IME is tracking, so each keystroke lands as if
+// it were its own committed character instead of combining (e.g. "가늠"
+// arriving as the separate jamo "ㄱㅏㄴㅡㅁ"). Skip the re-render while a
+// composition is in progress and catch up once it ends.
 document.getElementById('app').addEventListener('input', (e) => {
+  const searchInput = e.target.closest('.search-input');
+  if (!searchInput) return;
+  ui.search.query = searchInput.value;
+  if (e.isComposing) return;
+  renderPreservingSearchFocus();
+});
+
+document.getElementById('app').addEventListener('compositionend', (e) => {
   const searchInput = e.target.closest('.search-input');
   if (!searchInput) return;
   ui.search.query = searchInput.value;
@@ -1702,6 +1716,7 @@ document.getElementById('app').addEventListener('input', (e) => {
   }
 
   appEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return; // PC already has Enter for this — no mouse long-press
     const card = e.target.closest('.word-card');
     if (!card) return;
     clearPress();
