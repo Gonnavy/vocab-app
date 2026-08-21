@@ -280,6 +280,62 @@ input {
   font-weight: 600;
 }
 
+/* ---------- search bar (rendered once for PC, once for mobile — see
+   renderSearchBar; only one copy is visible per breakpoint) ---------- */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feed-header-row .search-bar {
+  margin-left: auto;
+}
+
+.search-scope {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 0.85em;
+}
+
+.search-input {
+  flex: 0 1 180px;
+  min-width: 80px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+.search-advanced-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.95em;
+  cursor: pointer;
+}
+
+.search-advanced-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.search-advanced-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .position-indicator {
   font-size: 0.85em;
   color: var(--text-muted);
@@ -881,6 +937,33 @@ input {
   }
   .mobile-topbar-title {
     font-weight: 700;
+    flex: 0 0 auto;
+  }
+
+  /* the PC copy of the search bar (feed-header-row) would otherwise still
+     show here too, since .feed-panel itself isn't mobile-hidden — only the
+     mobile-topbar copy belongs on this breakpoint */
+  .feed-header-row .search-bar {
+    display: none;
+  }
+  .mobile-topbar .search-bar {
+    flex: 1;
+    min-width: 0;
+    gap: 4px;
+  }
+  .mobile-topbar .search-scope {
+    flex: 0 0 auto;
+    max-width: 30vw;
+    padding: 4px 3px;
+    font-size: 0.78em;
+  }
+  .mobile-topbar .search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 6px;
+  }
+  .mobile-topbar .search-advanced-btn {
+    padding: 4px 6px;
   }
 
   .mobile-drawer-backdrop {

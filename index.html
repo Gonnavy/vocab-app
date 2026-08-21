@@ -291,6 +291,62 @@ input {
   font-weight: 600;
 }
 
+/* ---------- search bar (rendered once for PC, once for mobile — see
+   renderSearchBar; only one copy is visible per breakpoint) ---------- */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feed-header-row .search-bar {
+  margin-left: auto;
+}
+
+.search-scope {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 0.85em;
+}
+
+.search-input {
+  flex: 0 1 180px;
+  min-width: 80px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+.search-advanced-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.95em;
+  cursor: pointer;
+}
+
+.search-advanced-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.search-advanced-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .position-indicator {
   font-size: 0.85em;
   color: var(--text-muted);
@@ -892,6 +948,33 @@ input {
   }
   .mobile-topbar-title {
     font-weight: 700;
+    flex: 0 0 auto;
+  }
+
+  /* the PC copy of the search bar (feed-header-row) would otherwise still
+     show here too, since .feed-panel itself isn't mobile-hidden — only the
+     mobile-topbar copy belongs on this breakpoint */
+  .feed-header-row .search-bar {
+    display: none;
+  }
+  .mobile-topbar .search-bar {
+    flex: 1;
+    min-width: 0;
+    gap: 4px;
+  }
+  .mobile-topbar .search-scope {
+    flex: 0 0 auto;
+    max-width: 30vw;
+    padding: 4px 3px;
+    font-size: 0.78em;
+  }
+  .mobile-topbar .search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 6px;
+  }
+  .mobile-topbar .search-advanced-btn {
+    padding: 4px 6px;
   }
 
   .mobile-drawer-backdrop {
@@ -1354,7 +1437,22 @@ const ui = {
   preFitCardWidth: null, // settings.cardWidth snapshot, restored when fit is toggled off
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
   mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
+  search: {
+    query: '',
+    scope: 'word-meaning', // 'word-meaning' | 'word' | 'meaning'
+    advancedOpen: false,
+    memorized: false,
+    unmemorized: false,
+    important: false,
+    categories: null, // Set, lazily initialized when advanced search opens
+  },
 };
+
+const SEARCH_SCOPE_OPTIONS = [
+  { value: 'word-meaning', label: '표제어+뜻' },
+  { value: 'word', label: '표제어' },
+  { value: 'meaning', label: '뜻' },
+];
 
 resyncProgress(words);
 
@@ -1491,10 +1589,75 @@ function getFilteredWords() {
   return list;
 }
 
+// True once any advanced filter departs from its default (all categories,
+// no memorized/important checkbox) — used both to decide whether a search
+// is "active" with an empty query, and to badge the advanced-search button.
+function isSearchAdvancedActive() {
+  const s = ui.search;
+  if (s.memorized || s.unmemorized || s.important) return true;
+  if (s.categories) {
+    const allCats = getCategories();
+    if (s.categories.size !== allCats.length) return true;
+  }
+  return false;
+}
+
+// A search is "active" the moment it would actually narrow or reorder the
+// feed — either real query text, or a non-default advanced filter. This
+// lets the advanced panel's checkboxes work on their own, with an empty
+// query text treated as "match everything" within the scope.
+function isSearchActive() {
+  return Boolean(ui.search.query.trim()) || isSearchAdvancedActive();
+}
+
+function matchesSearchScope(word, query, scope) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  const wordMatch = word.word.toLowerCase().includes(q);
+  const meaningMatch = word.meanings.some((m) => (m.meaning || '').toLowerCase().includes(q));
+  if (scope === 'word') return wordMatch;
+  if (scope === 'meaning') return meaningMatch;
+  return wordMatch || meaningMatch;
+}
+
+// Search results are grouped by category (in the same order categories
+// otherwise appear throughout the app) and sorted alphabetically within
+// each group — a fixed, predictable order rather than the feed's normal
+// category-tab/shuffle-driven display, which this bypasses entirely while
+// a search is active (see getDisplayWords below).
+function getSearchResults() {
+  const s = ui.search;
+  const query = s.query.trim();
+  const cats = s.categories;
+  const categoryOrder = new Map(getCategories().map((c, i) => [c, i]));
+
+  return words
+    .filter((w) => {
+      if (cats && !cats.has(w.category)) return false;
+      if (!matchesSearchScope(w, query, s.scope)) return false;
+      const p = progress[w.id];
+      if (s.memorized || s.unmemorized) {
+        const isMemo = Boolean(p && p.memorized);
+        const memoOk = (s.memorized && isMemo) || (s.unmemorized && !isMemo);
+        if (!memoOk) return false;
+      }
+      if (s.important && !(p && p.important)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const catDiff = (categoryOrder.get(a.category) || 0) - (categoryOrder.get(b.category) || 0);
+      if (catDiff !== 0) return catDiff;
+      return a.word.localeCompare(b.word, 'ko');
+    });
+}
+
 // Filtered range, reordered per the active shuffle snapshot (if any). Stats
 // always read the plain word list / getFilteredWords(), never this — only
-// display order for the feed itself is affected by shuffling.
+// display order for the feed itself is affected by shuffling. A search in
+// progress takes over the source list entirely, ahead of category tab /
+// filter-mode / shuffle — those resume once the search is cleared.
 function getDisplayWords() {
+  if (isSearchActive()) return getSearchResults();
   const filtered = getFilteredWords();
   if (!ui.shuffleActive || !ui.shuffledIds) return filtered;
   const byId = new Map(filtered.map((w) => [w.id, w]));
@@ -1653,7 +1816,8 @@ function render() {
     renderProgressPanel() +
     '</div>' +
     renderMobileDrawer() +
-    (ui.exportOpen ? renderExportPanel() : '');
+    (ui.exportOpen ? renderExportPanel() : '') +
+    (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '');
 }
 
 function renderMobileTopBar() {
@@ -1661,6 +1825,31 @@ function renderMobileTopBar() {
   <div class="mobile-topbar">
     <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">☰</button>
     <span class="mobile-topbar-title">단어장</span>
+    ${renderSearchBar()}
+  </div>`;
+}
+
+// Rendered twice — once for the PC placement (feed-header row) and once for
+// the mobile placement (top bar) — same markup/state either way; CSS picks
+// which copy is actually visible per breakpoint, same pattern as the
+// desktop toolbar vs. the mobile drawer's settings view.
+function renderSearchBar() {
+  const scopeOptionsHtml = SEARCH_SCOPE_OPTIONS.map(
+    (o) =>
+      `<option value="${o.value}" ${o.value === ui.search.scope ? 'selected' : ''}>${escapeHtml(
+        o.label
+      )}</option>`
+  ).join('');
+
+  return `
+  <div class="search-bar">
+    <select class="search-scope" data-action="search-scope" aria-label="검색 범위">${scopeOptionsHtml}</select>
+    <input type="text" class="search-input" data-action="search-input" placeholder="검색" value="${escapeHtml(
+      ui.search.query
+    )}" aria-label="단어 검색" />
+    <button class="search-advanced-btn ${
+      isSearchAdvancedActive() ? 'active' : ''
+    }" data-action="open-advanced-search" aria-label="고급 검색">⚙</button>
   </div>`;
 }
 
@@ -1900,7 +2089,7 @@ function stepperControl(label, value, decAction, incAction) {
 }
 
 function renderFeedPanel(filtered, windowWords) {
-  const currentCategoryLabel = ui.activeCategory || '전체';
+  const currentCategoryLabel = isSearchActive() ? '검색 결과' : ui.activeCategory || '전체';
 
   const positionText = filtered.length
     ? `${filtered.length}개 중 ${ui.startIndex + 1}번째`
@@ -1926,6 +2115,7 @@ function renderFeedPanel(filtered, windowWords) {
       <div class="feed-header">단어장 피드</div>
       <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
       <span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>
+      ${renderSearchBar()}
     </div>
     <div class="position-indicator">${positionText}</div>
     <div class="feed-nav-row">
@@ -2187,6 +2377,54 @@ function renderExportPanel() {
   </div>`;
 }
 
+function renderAdvancedSearchPanel() {
+  const categories = getCategories();
+  if (!ui.search.categories) ui.search.categories = new Set(categories);
+  const s = ui.search;
+
+  const filterChip = (label, key) =>
+    `<button class="chip-btn ${s[key] ? 'active' : ''}" data-action="search-filter-toggle" data-filter="${key}">${label}</button>`;
+
+  const allCatsChecked = categories.length > 0 && categories.every((c) => s.categories.has(c));
+  const categoryChips =
+    `<button class="chip-btn ${allCatsChecked ? 'active' : ''}" data-action="search-category-all">전체 선택</button>` +
+    categories
+      .map(
+        (c) =>
+          `<button class="chip-btn ${
+            s.categories.has(c) ? 'active' : ''
+          }" data-action="search-category-toggle" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+      )
+      .join('');
+
+  return `
+  <div class="modal-backdrop" data-action="close-advanced-search">
+    <div class="modal">
+      <div class="modal-header">
+        고급 검색
+        <button class="modal-close" data-action="close-advanced-search">×</button>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">진행 상황</div>
+        <div class="chip-group">
+          ${filterChip('암기', 'memorized')}
+          ${filterChip('미암기', 'unmemorized')}
+          ${filterChip('중요', 'important')}
+        </div>
+      </div>
+      <div class="modal-section">
+        <div class="modal-section-title">단어 분류</div>
+        <div class="chip-group">
+          ${categoryChips || '<div class="modal-empty">불러온 단어가 없습니다</div>'}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="export-count-preview">${getSearchResults().length}개 단어 검색됨</span>
+      </div>
+    </div>
+  </div>`;
+}
+
 function getExportMatches() {
   const s = ui.exportStatus;
   const cats = ui.exportCategories || new Set(getCategories());
@@ -2345,6 +2583,12 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  if (e.target.dataset && e.target.dataset.action === 'close-advanced-search') {
+    ui.search.advancedOpen = false;
+    render();
+    return;
+  }
+
   const openBtn = e.target.closest('[data-action="open-csv"]');
   if (openBtn) {
     document.getElementById('csv-file-input').click();
@@ -2355,6 +2599,43 @@ document.getElementById('app').addEventListener('click', (e) => {
   if (openExport) {
     if (!ui.exportCategories) ui.exportCategories = new Set(getCategories());
     ui.exportOpen = true;
+    ui.search.advancedOpen = false;
+    render();
+    return;
+  }
+
+  const openAdvancedSearch = e.target.closest('[data-action="open-advanced-search"]');
+  if (openAdvancedSearch) {
+    if (!ui.search.categories) ui.search.categories = new Set(getCategories());
+    ui.search.advancedOpen = true;
+    ui.exportOpen = false;
+    render();
+    return;
+  }
+
+  const searchFilterToggle = e.target.closest('[data-action="search-filter-toggle"]');
+  if (searchFilterToggle) {
+    const key = searchFilterToggle.getAttribute('data-filter');
+    ui.search[key] = !ui.search[key];
+    render();
+    return;
+  }
+
+  const searchCategoryAllBtn = e.target.closest('[data-action="search-category-all"]');
+  if (searchCategoryAllBtn) {
+    const categories = getCategories();
+    const allChecked = categories.length > 0 && categories.every((c) => ui.search.categories.has(c));
+    ui.search.categories = allChecked ? new Set() : new Set(categories);
+    render();
+    return;
+  }
+
+  const searchCategoryBtn = e.target.closest('[data-action="search-category-toggle"]');
+  if (searchCategoryBtn) {
+    const cat = searchCategoryBtn.getAttribute('data-category');
+    if (!ui.search.categories) ui.search.categories = new Set(getCategories());
+    if (ui.search.categories.has(cat)) ui.search.categories.delete(cat);
+    else ui.search.categories.add(cat);
     render();
     return;
   }
@@ -2714,6 +2995,45 @@ document.getElementById('app').addEventListener('change', (e) => {
     return;
   }
 
+  const searchScopeSelect = e.target.closest('[data-action="search-scope"]');
+  if (searchScopeSelect) {
+    ui.search.scope = searchScopeSelect.value;
+    render();
+    return;
+  }
+
+});
+
+// The search box re-renders on every keystroke (so results update live),
+// but render() replaces #app's entire innerHTML — a plain render() here
+// would tear out the very input the user is typing into and drop focus
+// mid-word. Capture/restore the caret around the render so typing feels
+// uninterrupted. There are two <input class="search-input"> elements in the
+// DOM (desktop's feed-header copy and mobile's top-bar copy); only one is
+// ever visible at a time, so offsetParent picks out whichever one that is.
+function renderPreservingSearchFocus() {
+  const active = document.activeElement;
+  const wasSearchFocused = Boolean(active && active.classList && active.classList.contains('search-input'));
+  const selStart = wasSearchFocused ? active.selectionStart : null;
+  const selEnd = wasSearchFocused ? active.selectionEnd : null;
+
+  render();
+
+  if (!wasSearchFocused) return;
+  for (const el of document.querySelectorAll('.search-input')) {
+    if (el.offsetParent !== null) {
+      el.focus();
+      el.setSelectionRange(selStart, selEnd);
+      break;
+    }
+  }
+}
+
+document.getElementById('app').addEventListener('input', (e) => {
+  const searchInput = e.target.closest('.search-input');
+  if (!searchInput) return;
+  ui.search.query = searchInput.value;
+  renderPreservingSearchFocus();
 });
 
 // ---------- swipe paging (touch only, so mouse/trackpad use on PC is untouched) ----------
