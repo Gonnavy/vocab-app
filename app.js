@@ -679,13 +679,14 @@ function renderCard(word, index, focused) {
   const meaningsVisible = settings.mode !== 'meaning-test' || revealed;
 
   const dictUrl = 'https://dict.naver.com/dict.search?query=' + encodeURIComponent(word.word);
+  const importantClass = p.important ? ' important' : '';
   const wordHtml = wordVisible
-    ? `<div class="card-word"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
         word.word
       )}</span><a class="dict-link" href="${escapeHtml(
         dictUrl
       )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${DICT_SEARCH_ICON}</a></div>`
-    : `<div class="card-word placeholder">탭하여 단어 보기</div>`;
+    : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
 
   let meaningsHtml;
   if (meaningsVisible) {
@@ -713,7 +714,7 @@ function renderCard(word, index, focused) {
   }
 
   return `
-  <div class="word-card ${focused ? 'focused' : ''}" data-action="card-reveal" data-id="${escapeHtml(
+  <div class="word-card ${focused ? 'focused' : ''} ${p.memorized ? 'memorized' : ''}" data-action="card-reveal" data-id="${escapeHtml(
     word.id
   )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
     <div class="card-toggles">

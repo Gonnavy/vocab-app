@@ -423,6 +423,10 @@ input {
   touch-action: pan-y;
 }
 
+.word-card.memorized {
+  border: 2px solid var(--success);
+}
+
 .word-card.focused {
   position: relative;
   z-index: 2;
@@ -521,6 +525,11 @@ input {
   padding: 10px 4px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
+}
+
+.card-word.important {
+  border: 2px solid var(--important);
+  border-radius: 8px;
 }
 
 .card-word-spacer {
