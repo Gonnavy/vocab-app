@@ -8,25 +8,13 @@ const STORAGE_KEYS = {
 
 const DEFAULT_SETTINGS = {
   darkMode: false,
-  font: 'kopub-batang',
-  fontSize: 16,
+  fontSize: 15, // px, 12-22 (card body text size)
   mode: 'memorize', // 'memorize' | 'meaning-test' | 'word-test'
-  widthMode: 'contained', // 'contained' | 'full'
   cols: 3, // 1-5
   count: 3, // 1-15, cards per feed page
-  cardHeight: 320, // px, 320-640 (CARD_MIN_HEIGHT to 2x)
-  toolbarHeight: null, // px, null = auto
-  progressWidth: null, // px, null = default (260)
   toolbarCollapsed: false,
   progressCollapsed: false,
 };
-
-const FONT_OPTIONS = [
-  { value: 'kopub-batang', label: 'kopub 바탕체', stack: "'KoPubWorldBatang', 'Batang', serif" },
-  { value: 'system', label: '시스템 기본', stack: "-apple-system, 'Malgun Gothic', sans-serif" },
-  { value: 'gothic', label: '고딕체', stack: "'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" },
-  { value: 'serif', label: '명조체', stack: "'Batang', 'Nanum Myeongjo', serif" },
-];
 
 function readJSON(key, fallback) {
   try {

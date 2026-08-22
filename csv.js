@@ -191,5 +191,5 @@ function wordsToCSV(words, progress) {
       );
     });
   }
-  return lines.join('\r\n');
+  return '\uFEFF' + lines.join('\r\n');
 }

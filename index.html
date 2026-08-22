@@ -5,48 +5,60 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>단어장</title>
 <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#5b52f0" />
+<meta name="theme-color" content="#5980a6" />
 <link rel="icon" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+<script src="https://unpkg.com/lucide@0.451.0/dist/umd/lucide.js"></script>
 <style>
 :root {
   /* card-scoped font (font-size control only affects word-card text) */
-  --card-font-family: 'KoPubWorldBatang', 'Batang', serif;
-  --card-font-size: 16px;
+  --card-font-family: 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif;
+  --card-font-size: 15px;
+  /* numbers/labels — mixed into Korean text, falls back per-character for
+     the glyphs it doesn't cover (Barlow Condensed is Latin/digits only) */
+  --font-heading: 'Barlow Condensed', 'IBM Plex Sans KR', sans-serif;
 
-  --bg: #f5f6fb;
-  --panel-bg: #ffffff;
-  --border: #dfe2ec;
-  --text: #1c1f2b;
-  --text-muted: #666d7d;
-  --accent: #5b52f0;
-  --accent-soft: #ecebfe;
-  --success: #0e8c5a;
-  --success-soft: #e3faf0;
-  --important: #cf8a13;
-  --important-soft: #fdf0d5;
+  --paper: #f2f2f3;
+  --ink: #1d1f20;
+  --steel: #5980a6;
+  --steel-txt: #3f6485;
+  --steel-fill: color-mix(in srgb, var(--steel) 8%, var(--paper));
+  --steel-soft: color-mix(in srgb, var(--steel) 12%, var(--paper));
+  --important-underline: color-mix(in srgb, var(--steel) 45%, var(--paper));
+  --rule: color-mix(in srgb, var(--ink) 22%, transparent);
+  --rule-soft: color-mix(in srgb, var(--ink) 12%, transparent);
+  --rule-strong: color-mix(in srgb, var(--ink) 35%, transparent);
+  --muted: #5b5e62;
+  --muted-2: #838689;
+  --fill: color-mix(in srgb, var(--ink) 12%, transparent);
   --danger: #e5484d;
   --danger-soft: #fde8e8;
-  --checked-text: #9aa0a8;
-  --card-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.3);
 }
 
 body.dark {
-  --bg: #1c1f29;
-  --panel-bg: #262b38;
-  --border: #3e4457;
-  --text: #eef0f6;
-  --text-muted: #a4abbd;
-  --accent: #8b85ff;
-  --accent-soft: #322f57;
-  --success: #159961;
-  --success-soft: #1c3a30;
-  --important: #f2ba3f;
-  --important-soft: #453723;
+  --paper: #17181a;
+  --ink: #f0f1f2;
+  --steel: #7ea6c9;
+  --steel-txt: #7ea6c9;
+  --steel-fill: color-mix(in srgb, var(--steel) 12%, var(--paper));
+  --steel-soft: color-mix(in srgb, var(--steel) 16%, var(--paper));
+  --important-underline: color-mix(in srgb, var(--steel) 55%, var(--paper));
+  --rule: color-mix(in srgb, var(--ink) 24%, transparent);
+  --rule-soft: color-mix(in srgb, var(--ink) 13%, transparent);
+  --rule-strong: color-mix(in srgb, var(--ink) 38%, transparent);
+  --muted: #9aa0a6;
+  --muted-2: #7d8288;
+  --fill: color-mix(in srgb, var(--ink) 15%, transparent);
   --danger: #ff6b6b;
   --danger-soft: #4a2323;
-  --checked-text: #6b7280;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -55,16 +67,16 @@ body.dark {
 
 html {
   min-height: 100%;
-  background: var(--bg);
+  background: var(--paper);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   overflow-x: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, 'Malgun Gothic', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif;
   font-size: 15px;
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -77,6 +89,20 @@ input {
   color: inherit;
 }
 
+:focus-visible {
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
+}
+
+/* Every icon is a Lucide SVG swapped in for a <i data-lucide="..."> placeholder
+   at render time (see icon() / lucide.createIcons() in app.js) — one
+   consistent icon language, no emoji or ad-hoc inline SVGs. */
+svg.lucide {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 #app {
   width: fit-content;
   max-width: calc(100vw - 24px);
@@ -87,18 +113,13 @@ input {
   gap: 16px;
 }
 
-#app.full-width {
-  width: 100%;
-  max-width: 100%;
-}
-
 /* ---------- toolbar ---------- */
 
 .toolbar {
   position: relative;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 12px 16px 16px;
 }
 
@@ -110,23 +131,26 @@ input {
 }
 
 .btn {
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--text);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 0;
   padding: 6px 14px;
   cursor: pointer;
   font-weight: 600;
 }
 
 .btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--steel);
+  border-color: var(--steel);
   color: #fff;
 }
 
@@ -140,16 +164,16 @@ input {
   align-items: center;
   gap: 6px;
   font-size: 0.9em;
-  color: var(--text-muted);
+  color: var(--muted);
   white-space: nowrap;
 }
 
 .opt select {
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 3px 6px;
-  background: var(--panel-bg);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .stepper {
@@ -161,108 +185,39 @@ input {
 .stepper button {
   width: 24px;
   height: 24px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--text);
+  border-radius: 0;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
   cursor: pointer;
   line-height: 1;
 }
 
 .stepper button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .stepper-value {
   min-width: 1.5em;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-heading);
 }
 
-.slider-opt input[type='range'] {
-  width: 90px;
-}
-
-/* ---------- resize handles ---------- */
-
-.resize-handle {
-  position: relative;
-  flex: 0 0 auto;
-  background: transparent;
-  /* let our own pointer-drag logic own the gesture instead of the browser
-     interpreting a touch-drag here as a page scroll/pan */
-  touch-action: none;
-}
-
-.resize-handle::after {
-  content: '';
-  position: absolute;
-  background: var(--border);
-  border-radius: 999px;
-}
-
-.resize-h {
-  width: 100%;
-  height: 10px;
-  cursor: row-resize;
-  margin-top: 4px;
-}
-
-.resize-h::after {
-  left: 50%;
-  top: 50%;
-  width: 36px;
-  height: 4px;
-  transform: translate(-50%, -50%);
-}
-
-.resize-v {
-  width: 10px;
-  align-self: stretch;
-  cursor: col-resize;
-}
-
-.resize-v::after {
-  left: 50%;
-  top: 50%;
-  width: 4px;
-  height: 36px;
-  transform: translate(-50%, -50%);
-}
-
-/* Touch devices only (PC/mouse untouched): enlarge the invisible hit area
-   via a pseudo-element overlay rather than the handle's own box, so the
-   layout/width math elsewhere is unaffected. */
-@media (pointer: coarse) {
-  .resize-h::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -10px;
-    bottom: -10px;
-  }
-  .resize-v::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -10px;
-    right: -10px;
-  }
-}
-
-.resize-handle:hover::after,
-.resize-handle:active::after {
-  background: var(--accent);
+/* icon-only toggle (dark mode) — square hit target, centered icon */
+.icon-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
 }
 
 /* ---------- layout ---------- */
 
 .main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 10px var(--progress-w, 260px);
+  grid-template-columns: minmax(0, 1fr) var(--progress-w, 260px);
   gap: 16px;
   align-items: start;
   max-width: 100%;
@@ -270,9 +225,9 @@ input {
 
 .feed-panel {
   min-width: 0;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 16px;
 }
 
@@ -290,7 +245,7 @@ input {
 
 .current-category-label {
   font-size: 0.85em;
-  color: var(--text-muted);
+  color: var(--muted);
   font-weight: 600;
 }
 
@@ -309,50 +264,54 @@ input {
 
 .search-scope {
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 4px 6px;
-  background: var(--panel-bg);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
   font-size: 0.85em;
 }
 
 .search-input {
   flex: 0 1 180px;
   min-width: 80px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 10px;
-  background: var(--panel-bg);
-  color: var(--text);
+  border: none;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  padding: 5px 4px;
+  background: transparent;
+  color: var(--ink);
   font-size: 0.9em;
 }
 
 .search-advanced-btn {
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--text-muted);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 0;
   padding: 4px 9px;
-  font-size: 0.95em;
   cursor: pointer;
 }
 
 .search-advanced-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .search-advanced-btn.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--steel);
+  color: var(--steel-txt);
+  background: var(--steel-soft);
 }
 
 .position-indicator {
   font-size: 0.85em;
-  color: var(--text-muted);
+  font-family: var(--font-heading);
+  color: var(--muted);
   margin-bottom: 12px;
 }
 
@@ -374,11 +333,12 @@ input {
 
 .jump-input {
   width: 70px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 5px 8px;
-  background: var(--panel-bg);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-heading);
 }
 
 .pagination-bar {
@@ -392,20 +352,22 @@ input {
 
 .page-nav-btn {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 28px;
   height: 28px;
   padding: 0 4px;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--text);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 0;
   cursor: pointer;
-  font-size: 0.85em;
 }
 
 .page-nav-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .page-nav-btn:disabled {
@@ -426,30 +388,31 @@ input {
   padding: 0 4px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
+  color: var(--muted);
+  border-radius: 0;
   cursor: pointer;
   font-size: 0.82em;
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-heading);
 }
 
 .page-num-btn:hover {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--fill);
+  color: var(--ink);
 }
 
 .page-num-btn.current {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--steel);
+  color: #fff;
   font-weight: 700;
 }
 
 .cards {
   min-width: 0;
   display: grid;
-  gap: 12px;
-  padding: 5px;
-  margin: -5px;
+  gap: 0;
+  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule-soft);
   align-content: start;
   /* Without this, a touch drag here is ambiguous to the browser (the page
      also scrolls vertically) and it can claim the gesture as a native
@@ -460,7 +423,7 @@ input {
 }
 
 .cards-empty {
-  color: var(--text-muted);
+  color: var(--muted);
   padding: 40px 0;
   text-align: center;
   grid-column: 1 / -1;
@@ -474,31 +437,46 @@ input {
   margin: 0;
 }
 
+/* ---------- word card (a "단" of the dictionary page, not a boxed card:
+   no rounding, no shadow, no fill of its own — state is fill/weight, and
+   its only edges are the shared rule lines from .cards above) ---------- */
+
 .word-card {
   min-width: 0;
   font-family: var(--card-font-family);
   font-size: var(--card-font-size);
   font-weight: 400;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px;
-  min-height: 320px;
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: 0;
+  padding: 18px 20px 22px 18px;
+  min-height: 250px;
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  background: var(--panel-bg);
-  box-shadow: var(--card-shadow);
+  background: transparent;
   touch-action: pan-y;
 }
 
 .word-card.memorized {
-  border: 2px solid var(--success);
+  background: var(--steel-fill);
+}
+
+/* 표제어 앞 9px 스틸 사각 — memorized marker, drawn without extra markup */
+.word-card.memorized .card-word-text::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  background: var(--steel);
+  vertical-align: middle;
 }
 
 .word-card.focused {
   position: relative;
   z-index: 2;
-  box-shadow: 0 0 0 3px var(--accent), var(--card-shadow);
+  box-shadow: inset 0 0 0 1px var(--steel);
 }
 
 /* ---------- edit mode ---------- */
@@ -510,7 +488,7 @@ input {
 }
 
 .word-card.edit-selected {
-  border: 2px solid var(--danger);
+  box-shadow: inset 0 0 0 2px var(--danger);
   background: var(--danger-soft);
 }
 
@@ -521,8 +499,8 @@ input {
   width: 26px;
   height: 26px;
   border: 2px solid var(--danger);
-  border-radius: 6px;
-  background: var(--panel-bg);
+  border-radius: 0;
+  background: var(--paper);
   color: var(--danger);
   font-size: 1em;
   line-height: 1;
@@ -536,11 +514,11 @@ input {
 
 .edit-field {
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 8px 10px;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
   font-family: inherit;
   font-size: inherit;
   /* height is driven entirely by JS (see autoResizeEditFields / the
@@ -575,7 +553,7 @@ input {
 .edit-meaning-index {
   flex: 0 0 auto;
   padding-top: 8px;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .edit-meaning-fields {
@@ -588,26 +566,26 @@ input {
 
 .edit-example-input {
   font-size: 0.9em;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .edit-add-meaning-btn {
   flex: 0 0 auto;
   align-self: center;
   margin-top: 4px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
+  border: 1px dashed var(--rule);
+  border-radius: 0;
   padding: 6px 14px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 0.85em;
   font-weight: 600;
   cursor: pointer;
 }
 
 .edit-add-meaning-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .edit-add-card-btn,
@@ -615,25 +593,25 @@ input {
   flex: 0 0 auto;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   font-size: 1em;
   line-height: 1;
 }
 
 .edit-add-card-btn {
-  border: 2px solid var(--success);
-  background: var(--panel-bg);
-  color: var(--success);
+  border: 2px solid var(--steel);
+  background: var(--paper);
+  color: var(--steel-txt);
 }
 
 .edit-add-card-btn:hover {
-  background: var(--success-soft);
+  background: var(--steel-soft);
 }
 
 .edit-trash-btn {
   border: 2px solid var(--danger);
-  background: var(--panel-bg);
+  background: var(--paper);
   color: var(--danger);
   opacity: 0.5;
 }
@@ -651,32 +629,43 @@ input {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   column-gap: 6px;
-  font-size: 1.45em;
-  font-weight: 800;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  padding: 0 0 12px;
+  margin-bottom: 10px;
 }
 
-.card-word.important {
-  border: 2px solid var(--important);
-  border-radius: 8px;
+.card-word.important .card-word-text {
+  box-shadow: inset 0 -12px 0 var(--important-underline);
 }
 
-.card-word-spacer {
+.card-bookmark {
   grid-column: 1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  opacity: 0.25;
+}
+
+.card-bookmark.active {
+  opacity: 1;
+  color: var(--ink);
 }
 
 .card-word-text {
   grid-column: 2;
   text-align: center;
+  word-break: keep-all;
+  white-space: nowrap;
   overflow-wrap: anywhere;
 }
 
 .card-word.placeholder {
   display: block;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--muted);
   font-weight: 500;
   font-size: 1em;
 }
@@ -686,14 +675,15 @@ input {
   justify-self: start;
   flex: 0 0 auto;
   display: inline-flex;
-  color: var(--text-muted);
+  align-items: center;
+  color: var(--muted);
   opacity: 0.5;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 
 .dict-link:hover {
   opacity: 1;
-  color: var(--accent);
+  color: var(--steel-txt);
 }
 
 .card-meanings {
@@ -707,7 +697,7 @@ input {
 
 .meanings-placeholder,
 .meaning-empty {
-  color: var(--text-muted);
+  color: var(--muted);
   text-align: center;
   padding: 24px 8px;
   font-size: 0.9em;
@@ -725,8 +715,9 @@ input {
   background: transparent;
   padding: 0;
   margin: 0;
-  color: var(--text-muted);
-  font-size: 1em;
+  color: var(--muted);
+  font-family: var(--font-heading);
+  font-size: 14px;
   font-weight: 600;
   line-height: inherit;
   white-space: nowrap;
@@ -734,11 +725,11 @@ input {
 }
 
 .check-btn:hover {
-  color: var(--success);
+  color: var(--steel-txt);
 }
 
 .check-btn.checked {
-  color: var(--success);
+  color: var(--steel-txt);
 }
 
 .meaning-text {
@@ -748,19 +739,21 @@ input {
 
 .meaning {
   font-weight: 400;
+  line-height: 1.6;
+  word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
 .example {
-  font-size: 0.88em;
-  color: var(--text-muted);
+  font-size: 13.5px;
+  color: var(--muted);
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
 
 .meaning-item.checked .meaning,
 .meaning-item.checked .example {
-  color: var(--checked-text);
+  color: var(--muted);
   text-decoration: line-through;
   font-weight: 400;
 }
@@ -768,9 +761,9 @@ input {
 /* ---------- progress panel ---------- */
 
 .progress-panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 16px;
   position: sticky;
   top: 16px;
@@ -785,10 +778,13 @@ input {
 
 .panel-toggle {
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-muted);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 0;
   padding: 4px 10px;
   font-size: 0.8em;
   white-space: nowrap;
@@ -796,8 +792,8 @@ input {
 }
 
 .panel-toggle:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .progress-panel.collapsed .panel-toggle {
@@ -823,12 +819,12 @@ input {
   justify-content: space-between;
   align-items: baseline;
   padding: 7px 6px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.92em;
 }
 
 .stat-row small {
-  color: var(--text-muted);
+  color: var(--muted);
   font-weight: 400;
 }
 
@@ -837,26 +833,26 @@ input {
 }
 
 .stat-row.clickable:hover {
-  background: var(--bg);
+  background: var(--fill);
 }
 
 .stat-row.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--steel-soft);
+  color: var(--steel-txt);
   font-weight: 700;
 }
 
 .cat-stats {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
 .cat-stat {
-  border-radius: 8px;
+  border-radius: 0;
   padding: 4px;
 }
 
@@ -870,11 +866,13 @@ input {
 
 .cat-fold-btn {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--muted);
   cursor: pointer;
-  font-size: 0.9em;
   line-height: 1;
   padding: 2px;
   transition: transform 0.15s ease;
@@ -885,7 +883,7 @@ input {
 }
 
 .cat-fold-btn:hover {
-  color: var(--accent);
+  color: var(--steel-txt);
 }
 
 .cat-stat-name {
@@ -895,16 +893,17 @@ input {
 }
 
 .cat-stat-name:hover {
-  color: var(--accent);
+  color: var(--steel-txt);
 }
 
 .cat-stat-name.active {
-  color: var(--accent);
+  color: var(--steel-txt);
 }
 
 .cat-stat-rate {
-  color: var(--accent);
+  color: var(--steel-txt);
   font-weight: 700;
+  font-family: var(--font-heading);
 }
 
 .cat-sub-row {
@@ -912,27 +911,27 @@ input {
   justify-content: space-between;
   padding: 3px 8px;
   font-size: 0.8em;
-  color: var(--text-muted);
-  border-radius: 6px;
+  color: var(--muted);
+  border-radius: 0;
   cursor: pointer;
 }
 
 .cat-sub-row:hover {
-  background: var(--bg);
+  background: var(--fill);
 }
 
 .cat-sub-row.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--steel-soft);
+  color: var(--steel-txt);
   font-weight: 700;
 }
 
-/* ---------- export modal ---------- */
+/* ---------- export / advanced-search / help modals ---------- */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -940,14 +939,15 @@ input {
 }
 
 .modal {
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
   width: min(420px, 92vw);
   max-height: 85vh;
   overflow-y: auto;
   padding: 18px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 0.18s ease-out;
 }
 
 .modal-header {
@@ -960,16 +960,18 @@ input {
 }
 
 .modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 1.3em;
+  color: var(--muted);
   cursor: pointer;
   line-height: 1;
 }
 
 .modal-close:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .modal-section {
@@ -979,7 +981,7 @@ input {
 .modal-section-title {
   font-weight: 700;
   font-size: 0.88em;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
@@ -990,10 +992,10 @@ input {
 }
 
 .chip-btn {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-muted);
-  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 0;
   padding: 5px 12px;
   font-size: 0.85em;
   font-weight: 600;
@@ -1001,18 +1003,18 @@ input {
 }
 
 .chip-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
 .chip-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
 }
 
 .modal-empty {
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 0.9em;
 }
 
@@ -1023,7 +1025,7 @@ input {
   flex-direction: column;
   gap: 8px;
   font-size: 0.9em;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .help-list li {
@@ -1031,36 +1033,36 @@ input {
 }
 
 .help-list b {
-  color: var(--accent);
+  color: var(--steel-txt);
 }
 
 .help-list code {
-  background: var(--bg);
+  background: var(--fill);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 0;
   font-family: monospace;
 }
 
 .modal-hint {
   margin-top: 8px;
   font-size: 0.82em;
-  color: var(--text-muted);
+  color: var(--muted);
   line-height: 1.4;
 }
 
 .modal-hint code {
-  background: var(--bg);
+  background: var(--fill);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 0;
   font-family: monospace;
 }
 
 .modal-hint-error {
-  color: var(--important);
+  color: var(--danger);
 }
 
 .search-input-invalid {
-  border-color: var(--important) !important;
+  border-color: var(--danger) !important;
 }
 
 .modal-footer {
@@ -1069,20 +1071,17 @@ input {
   justify-content: space-between;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
 }
 
 .export-count-preview {
   font-size: 0.85em;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 @media (max-width: 900px) {
   .main {
     grid-template-columns: 1fr;
-  }
-  .resize-v {
-    display: none;
   }
   .progress-panel {
     position: static;
@@ -1127,16 +1126,18 @@ input {
     position: sticky;
     top: 0;
     z-index: 40;
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 0;
     padding: 8px 10px;
   }
   .hamburger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     background: transparent;
-    color: var(--text);
-    font-size: 1.3em;
+    color: var(--ink);
     line-height: 1;
     cursor: pointer;
     padding: 2px 6px;
@@ -1176,7 +1177,7 @@ input {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: color-mix(in srgb, var(--ink) 45%, transparent);
     z-index: 60;
   }
   .mobile-drawer {
@@ -1185,21 +1186,14 @@ input {
     left: 0;
     bottom: 0;
     width: min(300px, 82vw);
-    background: var(--panel-bg);
-    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.25);
+    background: var(--paper);
+    border-right: 1px solid var(--rule);
+    box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
     padding: 14px;
     overflow-y: auto;
-    animation: drawer-slide-in 0.18s ease;
-  }
-  @keyframes drawer-slide-in {
-    from {
-      transform: translateX(-100%);
-    }
-    to {
-      transform: translateX(0);
-    }
+    animation: riseIn 0.2s ease-out;
   }
   .drawer-header {
     display: flex;
@@ -1211,10 +1205,12 @@ input {
   }
   .drawer-close-btn,
   .drawer-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     background: transparent;
-    color: var(--text-muted);
-    font-size: 1.2em;
+    color: var(--muted);
     cursor: pointer;
     line-height: 1;
     padding: 2px 4px;
@@ -1223,12 +1219,12 @@ input {
     margin-top: 14px;
     padding-top: 14px;
     border: none;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--rule);
     display: flex;
     align-items: center;
     gap: 8px;
     background: transparent;
-    color: var(--text);
+    color: var(--ink);
     font-weight: 600;
     cursor: pointer;
     width: 100%;
@@ -1241,14 +1237,13 @@ input {
   .settings-section-title {
     font-weight: 700;
     font-size: 0.85em;
-    color: var(--text-muted);
+    color: var(--muted);
     margin-bottom: 8px;
   }
   .settings-section > * {
     margin-bottom: 8px;
   }
-  .opt,
-  .slider-opt {
+  .opt {
     font-size: 0.85em;
   }
 
@@ -1256,7 +1251,7 @@ input {
      tapping a card still sets ui.focusedIndex internally (harmless), this
      just drops the visual outline it would otherwise draw */
   .word-card.focused {
-    box-shadow: var(--card-shadow);
+    box-shadow: none;
     z-index: auto;
   }
 
@@ -1281,7 +1276,7 @@ input {
     gap: 8px;
   }
   .feed-panel {
-    border-radius: 8px;
+    border-radius: 0;
     padding: 10px;
   }
   .cards {
@@ -1291,7 +1286,7 @@ input {
     min-height: auto !important;
   }
   .card-word {
-    font-size: 1.25em;
+    font-size: 23px;
   }
 }
 
@@ -1308,9 +1303,6 @@ input {
   .main {
     grid-template-columns: 1fr;
   }
-  .resize-v {
-    display: none;
-  }
   .cards {
     grid-template-columns: repeat(2, 1fr) !important;
   }
@@ -1319,6 +1311,16 @@ input {
   }
 }
 
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>
 </head>
 <body>
@@ -1520,9 +1522,8 @@ function wordsToCSV(words, progress) {
       );
     });
   }
-  return lines.join('\r\n');
+  return '\uFEFF' + lines.join('\r\n');
 }
-
 </script>
 <script>
 // Persistence layer: localStorage-backed settings / word data / per-word progress.
@@ -1535,25 +1536,13 @@ const STORAGE_KEYS = {
 
 const DEFAULT_SETTINGS = {
   darkMode: false,
-  font: 'kopub-batang',
-  fontSize: 16,
+  fontSize: 15, // px, 12-22 (card body text size)
   mode: 'memorize', // 'memorize' | 'meaning-test' | 'word-test'
-  widthMode: 'contained', // 'contained' | 'full'
   cols: 3, // 1-5
   count: 3, // 1-15, cards per feed page
-  cardHeight: 320, // px, 320-640 (CARD_MIN_HEIGHT to 2x)
-  toolbarHeight: null, // px, null = auto
-  progressWidth: null, // px, null = default (260)
   toolbarCollapsed: false,
   progressCollapsed: false,
 };
-
-const FONT_OPTIONS = [
-  { value: 'kopub-batang', label: 'kopub 바탕체', stack: "'KoPubWorldBatang', 'Batang', serif" },
-  { value: 'system', label: '시스템 기본', stack: "-apple-system, 'Malgun Gothic', sans-serif" },
-  { value: 'gothic', label: '고딕체', stack: "'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" },
-  { value: 'serif', label: '명조체', stack: "'Batang', 'Nanum Myeongjo', serif" },
-];
 
 function readJSON(key, fallback) {
   try {
@@ -1606,7 +1595,6 @@ function defaultProgressFor(word) {
     checked: (word.meanings || []).map(() => false),
   };
 }
-
 </script>
 <script>
 // Main application: state, rendering, event handling.
@@ -1614,8 +1602,6 @@ function defaultProgressFor(word) {
 
 const CARD_GAP = 12;
 const CARD_MIN_WIDTH = 270; // floor for the always-on fit-to-width calculation
-const CARD_MIN_HEIGHT = 200; // slider floor
-const CARD_MAX_HEIGHT = CARD_MIN_HEIGHT * 2;
 
 // Card width is no longer a stored preference — it's recomputed every
 // render() from the available width and column count (see render()), so
@@ -2062,15 +2048,17 @@ function circledNumber(n) {
   return CIRCLED_NUMBERS[n - 1] || `(${n})`;
 }
 
-const DICT_SEARCH_ICON =
-  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+// Every icon in the app renders through this — a single Lucide set (no
+// emoji, no ad-hoc inline SVGs) so the icon language stays consistent.
+// lucide.createIcons() (called at the end of render()) swaps each
+// <i data-lucide="..."> placeholder for the matching inline SVG.
+function icon(name, size) {
+  return `<i data-lucide="${name}" width="${size}" height="${size}" stroke-width="1.5"></i>`;
+}
 
 function render() {
   document.body.classList.toggle('dark', settings.darkMode);
-  document.getElementById('app').classList.toggle('full-width', settings.widthMode === 'full');
 
-  const fontDef = FONT_OPTIONS.find((f) => f.value === settings.font) || FONT_OPTIONS[0];
-  document.documentElement.style.setProperty('--card-font-family', fontDef.stack);
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
 
   const filtered = getDisplayWords();
@@ -2080,7 +2068,7 @@ function render() {
     ui.focusedIndex = windowWords.length ? windowWords.length - 1 : null;
   }
 
-  const progressW = settings.progressCollapsed ? 40 : settings.progressWidth || 260;
+  const progressW = settings.progressCollapsed ? 40 : 260;
   const app = document.getElementById('app');
 
   // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
@@ -2104,32 +2092,26 @@ function render() {
   // (for focus-ring room) resolves a couple px tighter in practice than
   // the arithmetic here predicts, and without this slack the grid can end
   // up ~2px wider than its container and trigger a horizontal scrollbar.
-  const nonCardsChrome = 16 * 2 + 16 + 10 + 16 + progressW + 16 * 2; // feed-panel pad + main gaps/handle + progress panel + #app pad
+  const nonCardsChrome = 16 * 2 + 16 + progressW + 16 * 2; // feed-panel pad + main gap + progress panel + #app pad
   const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
   const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
   currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
 
-  // #app itself: in 'full' mode it's just 100% via CSS; in 'contained'
-  // mode it's sized to exactly wrap the now-computed cards, capped at the
+  // #app is sized to exactly wrap the now-computed cards, capped at the
   // viewport so it never forces page-level horizontal scroll, and centered
   // via margin:auto. Setting an explicit width here (rather than relying
   // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
   // quirks that didn't reliably propagate the card grid's width up through
   // .main / .feed-nav in testing — with a definite width the grid's own
   // tracks size normally.
-  if (settings.widthMode === 'full') {
-    app.style.width = '';
-  } else {
-    const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
-    const appWidth = cardsWidth + nonCardsChrome;
-    app.style.width = Math.min(appWidth, viewportCap) + 'px';
-  }
+  const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
+  const appWidth = cardsWidth + nonCardsChrome;
+  app.style.width = Math.min(appWidth, viewportCap) + 'px';
   app.innerHTML =
     renderMobileTopBar() +
     renderToolbar() +
     `<div class="main" style="--progress-w: ${progressW}px;">` +
     renderFeedPanel(filtered, windowWords) +
-    (settings.progressCollapsed ? '' : renderResizeHandle('resize-progress', 'v')) +
     renderProgressPanel() +
     '</div>' +
     renderMobileDrawer() +
@@ -2143,6 +2125,10 @@ function render() {
   // insertion. Only matters in edit mode; harmless no-op otherwise since
   // no .edit-field elements exist.
   if (ui.editMode) autoResizeEditFields();
+
+  // Swap every <i data-lucide="..."> placeholder just inserted above for
+  // its real inline SVG.
+  if (window.lucide) lucide.createIcons();
 }
 
 // scrollHeight measures the content+padding box, but these fields are
@@ -2165,7 +2151,7 @@ function autoResizeEditFields() {
 function renderMobileTopBar() {
   return `
   <div class="mobile-topbar">
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">☰</button>
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 20)}</button>
     <span class="mobile-topbar-title">단어장</span>
     ${renderSearchBar()}
   </div>`;
@@ -2195,7 +2181,7 @@ function renderSearchBar() {
   )}" aria-label="단어 검색" title="${regexError ? escapeHtml('잘못된 정규식: ' + regexError) : ''}" />
     <button class="search-advanced-btn ${
       isSearchAdvancedActive() ? 'active' : ''
-    }" data-action="open-advanced-search" aria-label="고급 검색">⚙</button>
+    }" data-action="open-advanced-search" aria-label="고급 검색">${icon('sliders-horizontal', 15)}</button>
   </div>`;
 }
 
@@ -2231,7 +2217,7 @@ function renderMobileProgressView() {
         <div class="cat-stat-header">
           <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
         c.category
-      )}" aria-label="접기/펼치기">▾</button>
+      )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
           <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
         c.category
       )}</span>
@@ -2251,7 +2237,7 @@ function renderMobileProgressView() {
   return `
     <div class="drawer-header">
       진행률
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
     </div>
     <div class="stat-row static">
       <span>전체 개수</span>
@@ -2267,19 +2253,12 @@ function renderMobileProgressView() {
     ${filterRow('미암기', 'unmemorized')}
     ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>
-    <button class="drawer-settings-btn" data-action="open-help">📖 사용법</button>
-    <button class="drawer-settings-btn" data-action="open-mobile-settings">⚙ 설정</button>
+    <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
+    <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
   `;
 }
 
 function renderMobileSettingsView() {
-  const fontOptionsHtml = FONT_OPTIONS.map(
-    (f) =>
-      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
-        f.label
-      )}</option>`
-  ).join('');
-
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -2290,49 +2269,32 @@ function renderMobileSettingsView() {
     )
     .join('');
 
-  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
-  const widthOptionsHtml = Object.keys(widthLabels)
-    .map(
-      (m) =>
-        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
-          widthLabels[m]
-        )}</option>`
-    )
-    .join('');
-
   return `
     <div class="drawer-header">
-      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">←</button>
+      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 18)}</button>
       설정
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">데이터</div>
-      <button class="btn btn-open" data-action="open-csv">열기</button>
-      <button class="btn" data-action="open-export">내보내기</button>
+      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">화면</div>
-      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
-      <label class="opt">
-        폰트
-        <select data-action="select-font">${fontOptionsHtml}</select>
-      </label>
+      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+    settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
+  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
     </div>
     <div class="settings-section">
       <div class="settings-section-title">레이아웃</div>
-      <label class="opt">
-        레이아웃
-        <select data-action="select-width">${widthOptionsHtml}</select>
-      </label>
       <label class="opt">
         모드
         <select data-action="select-mode">${modeOptionsHtml}</select>
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
     </div>
     <div class="settings-section">
       <div class="settings-section-title">단어 편집</div>
@@ -2341,18 +2303,7 @@ function renderMobileSettingsView() {
   `;
 }
 
-function renderResizeHandle(action, orientation) {
-  return `<div class="resize-handle resize-${orientation}" data-action="${action}" title="드래그하여 크기 조절"></div>`;
-}
-
 function renderToolbar() {
-  const fontOptionsHtml = FONT_OPTIONS.map(
-    (f) =>
-      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
-        f.label
-      )}</option>`
-  ).join('');
-
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -2363,64 +2314,39 @@ function renderToolbar() {
     )
     .join('');
 
-  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
-  const widthOptionsHtml = Object.keys(widthLabels)
-    .map(
-      (m) =>
-        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
-          widthLabels[m]
-        )}</option>`
-    )
-    .join('');
-
-  const toolbarStyle = settings.toolbarHeight
-    ? `style="height:${settings.toolbarHeight}px;overflow-y:auto;"`
-    : '';
-
   if (settings.toolbarCollapsed) {
     return `
   <div class="toolbar collapsed">
-    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">▾ 설정</button>
+    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">${icon(
+      'chevron-down',
+      15
+    )} 설정</button>
   </div>`;
   }
 
   return `
   <div class="toolbar">
-    <div class="toolbar-row" ${toolbarStyle}>
-      <button class="btn btn-open" data-action="open-csv">열기</button>
-      <button class="btn" data-action="open-export">내보내기</button>
-      <button class="btn" data-action="open-help">사용법</button>
-      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
-      <label class="opt">
-        폰트
-        <select data-action="select-font">${fontOptionsHtml}</select>
-      </label>
+    <div class="toolbar-row">
+      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
+      <button class="btn" data-action="open-help">${icon('circle-help', 15)} 사용법</button>
+      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+    settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
+  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-      <label class="opt">
-        레이아웃
-        <select data-action="select-width">${widthOptionsHtml}</select>
-      </label>
       <label class="opt">
         모드
         <select data-action="select-mode">${modeOptionsHtml}</select>
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
       <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
-      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">▴ 접기</button>
+      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
+        'chevron-up',
+        15
+      )} 접기</button>
     </div>
-    ${renderResizeHandle('resize-toolbar', 'h')}
   </div>`;
-}
-
-function sliderControl(label, value, min, max, action) {
-  return `
-      <label class="opt slider-opt">
-        ${label}
-        <input type="range" min="${min}" max="${max}" step="1" value="${value}" data-action="${action}" />
-        <span class="stepper-value">${value}</span>
-      </label>`;
 }
 
 function stepperControl(label, value, decAction, incAction) {
@@ -2526,8 +2452,8 @@ function renderPaginationBar(filteredLen) {
   }
 
   // Mobile drops the step/jump icon buttons entirely — swiping already
-  // covers single-page stepping, and the ⏮⏪⏩⏭ row eats too much width on
-  // a phone screen for what it adds. Just the tappable page numbers remain.
+  // covers single-page stepping, and the extra icon row eats too much width
+  // on a phone screen for what it adds. Just the tappable page numbers remain.
   if (mobile) {
     return `
   <div class="pagination-bar">
@@ -2542,23 +2468,23 @@ function renderPaginationBar(filteredLen) {
   <div class="pagination-bar">
     <button class="page-nav-btn" data-action="page-first" ${
       atFirst ? 'disabled' : ''
-    } aria-label="맨 처음 페이지">⏮</button>
+    } aria-label="맨 처음 페이지">${icon('chevrons-left', 15)}</button>
     <button class="page-nav-btn" data-action="page-back5" ${
       atFirst ? 'disabled' : ''
-    } aria-label="5페이지 뒤로">⏪</button>
+    } aria-label="5페이지 뒤로">${icon('rewind', 15)}</button>
     <button class="page-nav-btn" data-action="page-prev" ${
       atFirst ? 'disabled' : ''
-    } aria-label="이전 페이지">◀</button>
+    } aria-label="이전 페이지">${icon('chevron-left', 15)}</button>
     <div class="page-num-list">${pageButtons}</div>
     <button class="page-nav-btn" data-action="page-next" ${
       atLast ? 'disabled' : ''
-    } aria-label="다음 페이지">▶</button>
+    } aria-label="다음 페이지">${icon('chevron-right', 15)}</button>
     <button class="page-nav-btn" data-action="page-fwd5" ${
       atLast ? 'disabled' : ''
-    } aria-label="5페이지 앞으로">⏩</button>
+    } aria-label="5페이지 앞으로">${icon('fast-forward', 15)}</button>
     <button class="page-nav-btn" data-action="page-last" ${
       atLast ? 'disabled' : ''
-    } aria-label="맨 마지막 페이지">⏭</button>
+    } aria-label="맨 마지막 페이지">${icon('chevrons-right', 15)}</button>
   </div>`;
 }
 
@@ -2573,12 +2499,18 @@ function renderCard(word, index, focused) {
 
   const dictUrl = 'https://dict.naver.com/dict.search?query=' + encodeURIComponent(word.word);
   const importantClass = p.important ? ' important' : '';
+  const bookmarkHtml = `<span class="card-bookmark${
+    p.important ? ' active' : ''
+  }" aria-hidden="true">${icon('bookmark', 15)}</span>`;
   const wordHtml = wordVisible
-    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}">${bookmarkHtml}<span class="card-word-text">${escapeHtml(
         word.word
       )}</span><a class="dict-link" href="${escapeHtml(
         dictUrl
-      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${DICT_SEARCH_ICON}</a></div>`
+      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${icon(
+        'search',
+        14
+      )}</a></div>`
     : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
 
   let meaningsHtml;
@@ -2591,9 +2523,7 @@ function renderCard(word, index, focused) {
             <div class="meaning-item ${checked ? 'checked' : ''}">
               <button class="check-btn ${checked ? 'checked' : ''}" data-action="toggle-checked" data-id="${escapeHtml(
                 word.id
-              )}" data-index="${i}" aria-label="${circledNumber(i + 1)}번 뜻 암기 확인">${circledNumber(
-                i + 1
-              )}</button>
+              )}" data-index="${i}" aria-label="${i + 1}번 뜻 암기 확인">${i + 1}</button>
               <div class="meaning-text">
                 ${m.meaning ? `<div class="meaning">${escapeHtml(m.meaning)}</div>` : ''}
                 ${m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
@@ -2609,7 +2539,7 @@ function renderCard(word, index, focused) {
   return `
   <div class="word-card ${focused ? 'focused' : ''} ${p.memorized ? 'memorized' : ''}" data-action="card-reveal" data-id="${escapeHtml(
     word.id
-  )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+  )}" data-index="${index}">
     ${wordHtml}
     <div class="card-meanings">${meaningsHtml}</div>
   </div>`;
@@ -2644,7 +2574,7 @@ function renderEditableCard(word, p, index, focused) {
   return `
   <div class="word-card editable ${focused ? 'focused' : ''} ${selected ? 'edit-selected' : ''} ${
     p.memorized ? 'memorized' : ''
-  }" data-id="${escapeHtml(word.id)}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+  }" data-id="${escapeHtml(word.id)}" data-index="${index}">
     <button class="card-edit-delete" data-action="edit-delete-word" data-id="${escapeHtml(
       word.id
     )}" aria-label="단어 삭제">×</button>
@@ -2681,7 +2611,7 @@ function renderProgressPanel() {
         <div class="cat-stat-header">
           <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
         c.category
-      )}" aria-label="접기/펼치기">▾</button>
+      )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
           <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
         c.category
       )}</span>
@@ -2699,7 +2629,10 @@ function renderProgressPanel() {
   if (settings.progressCollapsed) {
     return `
   <aside class="progress-panel collapsed">
-    <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 펼치기">◂</button>
+    <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 펼치기">${icon(
+      'chevron-left',
+      15
+    )}</button>
   </aside>`;
   }
 
@@ -2707,7 +2640,10 @@ function renderProgressPanel() {
   <aside class="progress-panel">
     <div class="progress-header">
       진행률
-      <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 접기">▸</button>
+      <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 접기">${icon(
+        'chevron-right',
+        15
+      )}</button>
     </div>
     <div class="stat-row static">
       <span>전체 개수</span>
@@ -2753,7 +2689,7 @@ function renderExportPanel() {
     <div class="modal">
       <div class="modal-header">
         내보내기
-        <button class="modal-close" data-action="close-export">×</button>
+        <button class="modal-close" data-action="close-export">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">진행 상황</div>
@@ -2805,7 +2741,7 @@ function renderAdvancedSearchPanel() {
     <div class="modal">
       <div class="modal-header">
         고급 검색
-        <button class="modal-close" data-action="close-advanced-search">×</button>
+        <button class="modal-close" data-action="close-advanced-search">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">검색 방식</div>
@@ -2844,7 +2780,7 @@ function renderHelpPanel() {
     <div class="modal">
       <div class="modal-header">
         사용법
-        <button class="modal-close" data-action="close-help">×</button>
+        <button class="modal-close" data-action="close-help">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">PC 단축키</div>
@@ -2862,7 +2798,7 @@ function renderHelpPanel() {
           <li><b>좌우 스와이프</b> (카드 영역) — 페이지 이동</li>
           <li><b>더블탭</b> (카드) — 암기/미암기 체크</li>
           <li><b>길게 누르기</b> (카드) — 중요 체크/해제</li>
-          <li><b>☰ 메뉴</b> — 진행률·분류별 통계, 사용법, 설정</li>
+          <li><b>메뉴 아이콘</b> — 진행률·분류별 통계, 사용법, 설정</li>
         </ul>
       </div>
       <div class="modal-section">
@@ -2870,15 +2806,15 @@ function renderHelpPanel() {
         <ul class="help-list">
           <li>검색창 왼쪽에서 범위 선택 — <b>표제어+뜻</b>(기본) / 표제어 / 뜻</li>
           <li>결과는 단어 분류별로 묶이고, 그 안에서 가나다순으로 정렬됩니다</li>
-          <li><b>⚙ 고급 검색</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
+          <li><b>고급 검색 아이콘</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
           <li>기본적으로 검색어를 <b>정규표현식</b>으로 해석합니다. 고급 검색에서 <b>정규식 미사용</b>을 누르면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다</li>
         </ul>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">카드 표시</div>
         <ul class="help-list">
-          <li><b>초록 테두리</b> (카드 전체) — 암기된 단어</li>
-          <li><b>골드 테두리</b> (표제어) — 중요 단어</li>
+          <li><b>스틸 배경 채움</b> (카드 전체) — 암기된 단어</li>
+          <li><b>표제어 밑줄 + 북마크 아이콘</b> — 중요 단어</li>
         </ul>
       </div>
     </div>
@@ -2906,7 +2842,7 @@ function doExport() {
     return;
   }
   const csv = wordsToCSV(matches, progress);
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -2922,63 +2858,6 @@ function doExport() {
   URL.revokeObjectURL(url);
   ui.exportOpen = false;
   render();
-}
-
-// ---------- resize handles ----------
-
-function startResize(kind, startEvent) {
-  startEvent.preventDefault();
-  // On touch, capturing the pointer to the handle keeps move/up events
-  // targeted at this drag even if the finger strays off the thin strip —
-  // touch contact points are far less precise than a mouse cursor.
-  if (startEvent.target && startEvent.target.setPointerCapture) {
-    try {
-      startEvent.target.setPointerCapture(startEvent.pointerId);
-    } catch (err) {
-      // ignore — capture is a reliability nicety, not a requirement
-    }
-  }
-  const startX = startEvent.clientX;
-  const startY = startEvent.clientY;
-
-  const toolbarRow = document.querySelector('.toolbar-row');
-  const mainEl = document.querySelector('.main');
-  const progressPanel = document.querySelector('.progress-panel');
-
-  const startToolbarH = (toolbarRow && toolbarRow.getBoundingClientRect().height) || 56;
-  const startProgressW = (progressPanel && progressPanel.getBoundingClientRect().width) || 260;
-
-  let pending = null;
-
-  function onMove(e) {
-    if (kind === 'resize-toolbar') {
-      const newH = Math.max(56, Math.min(400, startToolbarH + (e.clientY - startY)));
-      if (toolbarRow) {
-        toolbarRow.style.height = newH + 'px';
-        toolbarRow.style.overflowY = 'auto';
-      }
-      pending = newH;
-    } else if (kind === 'resize-progress') {
-      const newW = Math.max(180, Math.min(520, startProgressW - (e.clientX - startX)));
-      if (mainEl) mainEl.style.setProperty('--progress-w', newW + 'px');
-      pending = newW;
-    }
-  }
-
-  function onUp() {
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
-    document.removeEventListener('pointercancel', onUp);
-    if (pending == null) return;
-    if (kind === 'resize-toolbar') settings.toolbarHeight = Math.round(pending);
-    if (kind === 'resize-progress') settings.progressWidth = Math.round(pending);
-    saveSettings(settings);
-    render();
-  }
-
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp);
-  document.addEventListener('pointercancel', onUp);
 }
 
 // ---------- events ----------
@@ -2998,13 +2877,6 @@ document.getElementById('csv-file-input').addEventListener('change', (e) => {
   };
   reader.readAsArrayBuffer(file);
   e.target.value = '';
-});
-
-document.getElementById('app').addEventListener('pointerdown', (e) => {
-  const handle = e.target.closest('[data-action^="resize-"]');
-  if (handle) {
-    startResize(handle.getAttribute('data-action'), e);
-  }
 });
 
 document.getElementById('app').addEventListener('keydown', (e) => {
@@ -3136,14 +3008,14 @@ document.getElementById('app').addEventListener('click', (e) => {
 
   const fontDec = e.target.closest('[data-action="font-size-dec"]');
   if (fontDec) {
-    settings.fontSize = Math.max(10, settings.fontSize - 1);
+    settings.fontSize = Math.max(12, settings.fontSize - 1);
     saveSettings(settings);
     render();
     return;
   }
   const fontInc = e.target.closest('[data-action="font-size-inc"]');
   if (fontInc) {
-    settings.fontSize = Math.min(32, settings.fontSize + 1);
+    settings.fontSize = Math.min(22, settings.fontSize + 1);
     saveSettings(settings);
     render();
     return;
@@ -3456,35 +3328,11 @@ document.addEventListener(
 );
 
 document.getElementById('app').addEventListener('change', (e) => {
-  const fontSelect = e.target.closest('[data-action="select-font"]');
-  if (fontSelect) {
-    settings.font = fontSelect.value;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
-  const widthSelect = e.target.closest('[data-action="select-width"]');
-  if (widthSelect) {
-    settings.widthMode = widthSelect.value;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const modeSelect = e.target.closest('[data-action="select-mode"]');
   if (modeSelect) {
     settings.mode = modeSelect.value;
     saveSettings(settings);
     ui.revealedIds.clear();
-    render();
-    return;
-  }
-
-  const cardHeightSlider = e.target.closest('[data-action="card-height-slider"]');
-  if (cardHeightSlider) {
-    settings.cardHeight = Number(cardHeightSlider.value);
-    saveSettings(settings);
     render();
     return;
   }
@@ -3910,7 +3758,6 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
-
 </script>
 </body>
 </html>

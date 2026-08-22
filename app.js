@@ -3,8 +3,6 @@
 
 const CARD_GAP = 12;
 const CARD_MIN_WIDTH = 270; // floor for the always-on fit-to-width calculation
-const CARD_MIN_HEIGHT = 200; // slider floor
-const CARD_MAX_HEIGHT = CARD_MIN_HEIGHT * 2;
 
 // Card width is no longer a stored preference — it's recomputed every
 // render() from the available width and column count (see render()), so
@@ -451,15 +449,17 @@ function circledNumber(n) {
   return CIRCLED_NUMBERS[n - 1] || `(${n})`;
 }
 
-const DICT_SEARCH_ICON =
-  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+// Every icon in the app renders through this — a single Lucide set (no
+// emoji, no ad-hoc inline SVGs) so the icon language stays consistent.
+// lucide.createIcons() (called at the end of render()) swaps each
+// <i data-lucide="..."> placeholder for the matching inline SVG.
+function icon(name, size) {
+  return `<i data-lucide="${name}" width="${size}" height="${size}" stroke-width="1.5"></i>`;
+}
 
 function render() {
   document.body.classList.toggle('dark', settings.darkMode);
-  document.getElementById('app').classList.toggle('full-width', settings.widthMode === 'full');
 
-  const fontDef = FONT_OPTIONS.find((f) => f.value === settings.font) || FONT_OPTIONS[0];
-  document.documentElement.style.setProperty('--card-font-family', fontDef.stack);
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
 
   const filtered = getDisplayWords();
@@ -469,7 +469,7 @@ function render() {
     ui.focusedIndex = windowWords.length ? windowWords.length - 1 : null;
   }
 
-  const progressW = settings.progressCollapsed ? 40 : settings.progressWidth || 260;
+  const progressW = settings.progressCollapsed ? 40 : 260;
   const app = document.getElementById('app');
 
   // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
@@ -493,32 +493,26 @@ function render() {
   // (for focus-ring room) resolves a couple px tighter in practice than
   // the arithmetic here predicts, and without this slack the grid can end
   // up ~2px wider than its container and trigger a horizontal scrollbar.
-  const nonCardsChrome = 16 * 2 + 16 + 10 + 16 + progressW + 16 * 2; // feed-panel pad + main gaps/handle + progress panel + #app pad
+  const nonCardsChrome = 16 * 2 + 16 + progressW + 16 * 2; // feed-panel pad + main gap + progress panel + #app pad
   const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
   const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
   currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
 
-  // #app itself: in 'full' mode it's just 100% via CSS; in 'contained'
-  // mode it's sized to exactly wrap the now-computed cards, capped at the
+  // #app is sized to exactly wrap the now-computed cards, capped at the
   // viewport so it never forces page-level horizontal scroll, and centered
   // via margin:auto. Setting an explicit width here (rather than relying
   // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
   // quirks that didn't reliably propagate the card grid's width up through
   // .main / .feed-nav in testing — with a definite width the grid's own
   // tracks size normally.
-  if (settings.widthMode === 'full') {
-    app.style.width = '';
-  } else {
-    const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
-    const appWidth = cardsWidth + nonCardsChrome;
-    app.style.width = Math.min(appWidth, viewportCap) + 'px';
-  }
+  const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
+  const appWidth = cardsWidth + nonCardsChrome;
+  app.style.width = Math.min(appWidth, viewportCap) + 'px';
   app.innerHTML =
     renderMobileTopBar() +
     renderToolbar() +
     `<div class="main" style="--progress-w: ${progressW}px;">` +
     renderFeedPanel(filtered, windowWords) +
-    (settings.progressCollapsed ? '' : renderResizeHandle('resize-progress', 'v')) +
     renderProgressPanel() +
     '</div>' +
     renderMobileDrawer() +
@@ -532,6 +526,10 @@ function render() {
   // insertion. Only matters in edit mode; harmless no-op otherwise since
   // no .edit-field elements exist.
   if (ui.editMode) autoResizeEditFields();
+
+  // Swap every <i data-lucide="..."> placeholder just inserted above for
+  // its real inline SVG.
+  if (window.lucide) lucide.createIcons();
 }
 
 // scrollHeight measures the content+padding box, but these fields are
@@ -554,7 +552,7 @@ function autoResizeEditFields() {
 function renderMobileTopBar() {
   return `
   <div class="mobile-topbar">
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">☰</button>
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 20)}</button>
     <span class="mobile-topbar-title">단어장</span>
     ${renderSearchBar()}
   </div>`;
@@ -584,7 +582,7 @@ function renderSearchBar() {
   )}" aria-label="단어 검색" title="${regexError ? escapeHtml('잘못된 정규식: ' + regexError) : ''}" />
     <button class="search-advanced-btn ${
       isSearchAdvancedActive() ? 'active' : ''
-    }" data-action="open-advanced-search" aria-label="고급 검색">⚙</button>
+    }" data-action="open-advanced-search" aria-label="고급 검색">${icon('sliders-horizontal', 15)}</button>
   </div>`;
 }
 
@@ -620,7 +618,7 @@ function renderMobileProgressView() {
         <div class="cat-stat-header">
           <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
         c.category
-      )}" aria-label="접기/펼치기">▾</button>
+      )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
           <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
         c.category
       )}</span>
@@ -640,7 +638,7 @@ function renderMobileProgressView() {
   return `
     <div class="drawer-header">
       진행률
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
     </div>
     <div class="stat-row static">
       <span>전체 개수</span>
@@ -656,19 +654,12 @@ function renderMobileProgressView() {
     ${filterRow('미암기', 'unmemorized')}
     ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>
-    <button class="drawer-settings-btn" data-action="open-help">📖 사용법</button>
-    <button class="drawer-settings-btn" data-action="open-mobile-settings">⚙ 설정</button>
+    <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
+    <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
   `;
 }
 
 function renderMobileSettingsView() {
-  const fontOptionsHtml = FONT_OPTIONS.map(
-    (f) =>
-      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
-        f.label
-      )}</option>`
-  ).join('');
-
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -679,49 +670,32 @@ function renderMobileSettingsView() {
     )
     .join('');
 
-  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
-  const widthOptionsHtml = Object.keys(widthLabels)
-    .map(
-      (m) =>
-        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
-          widthLabels[m]
-        )}</option>`
-    )
-    .join('');
-
   return `
     <div class="drawer-header">
-      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">←</button>
+      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 18)}</button>
       설정
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">×</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">데이터</div>
-      <button class="btn btn-open" data-action="open-csv">열기</button>
-      <button class="btn" data-action="open-export">내보내기</button>
+      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">화면</div>
-      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
-      <label class="opt">
-        폰트
-        <select data-action="select-font">${fontOptionsHtml}</select>
-      </label>
+      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+    settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
+  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
     </div>
     <div class="settings-section">
       <div class="settings-section-title">레이아웃</div>
-      <label class="opt">
-        레이아웃
-        <select data-action="select-width">${widthOptionsHtml}</select>
-      </label>
       <label class="opt">
         모드
         <select data-action="select-mode">${modeOptionsHtml}</select>
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
     </div>
     <div class="settings-section">
       <div class="settings-section-title">단어 편집</div>
@@ -730,18 +704,7 @@ function renderMobileSettingsView() {
   `;
 }
 
-function renderResizeHandle(action, orientation) {
-  return `<div class="resize-handle resize-${orientation}" data-action="${action}" title="드래그하여 크기 조절"></div>`;
-}
-
 function renderToolbar() {
-  const fontOptionsHtml = FONT_OPTIONS.map(
-    (f) =>
-      `<option value="${f.value}" ${f.value === settings.font ? 'selected' : ''}>${escapeHtml(
-        f.label
-      )}</option>`
-  ).join('');
-
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -752,64 +715,39 @@ function renderToolbar() {
     )
     .join('');
 
-  const widthLabels = { contained: '기본 비율', full: '좌우 꽉차게' };
-  const widthOptionsHtml = Object.keys(widthLabels)
-    .map(
-      (m) =>
-        `<option value="${m}" ${m === settings.widthMode ? 'selected' : ''}>${escapeHtml(
-          widthLabels[m]
-        )}</option>`
-    )
-    .join('');
-
-  const toolbarStyle = settings.toolbarHeight
-    ? `style="height:${settings.toolbarHeight}px;overflow-y:auto;"`
-    : '';
-
   if (settings.toolbarCollapsed) {
     return `
   <div class="toolbar collapsed">
-    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">▾ 설정</button>
+    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">${icon(
+      'chevron-down',
+      15
+    )} 설정</button>
   </div>`;
   }
 
   return `
   <div class="toolbar">
-    <div class="toolbar-row" ${toolbarStyle}>
-      <button class="btn btn-open" data-action="open-csv">열기</button>
-      <button class="btn" data-action="open-export">내보내기</button>
-      <button class="btn" data-action="open-help">사용법</button>
-      <button class="chip-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark">다크모드</button>
-      <label class="opt">
-        폰트
-        <select data-action="select-font">${fontOptionsHtml}</select>
-      </label>
+    <div class="toolbar-row">
+      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
+      <button class="btn" data-action="open-help">${icon('circle-help', 15)} 사용법</button>
+      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+    settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
+  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-      <label class="opt">
-        레이아웃
-        <select data-action="select-width">${widthOptionsHtml}</select>
-      </label>
       <label class="opt">
         모드
         <select data-action="select-mode">${modeOptionsHtml}</select>
       </label>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      ${sliderControl('카드 세로', settings.cardHeight, CARD_MIN_HEIGHT, CARD_MAX_HEIGHT, 'card-height-slider')}
       <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
-      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">▴ 접기</button>
+      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
+        'chevron-up',
+        15
+      )} 접기</button>
     </div>
-    ${renderResizeHandle('resize-toolbar', 'h')}
   </div>`;
-}
-
-function sliderControl(label, value, min, max, action) {
-  return `
-      <label class="opt slider-opt">
-        ${label}
-        <input type="range" min="${min}" max="${max}" step="1" value="${value}" data-action="${action}" />
-        <span class="stepper-value">${value}</span>
-      </label>`;
 }
 
 function stepperControl(label, value, decAction, incAction) {
@@ -915,8 +853,8 @@ function renderPaginationBar(filteredLen) {
   }
 
   // Mobile drops the step/jump icon buttons entirely — swiping already
-  // covers single-page stepping, and the ⏮⏪⏩⏭ row eats too much width on
-  // a phone screen for what it adds. Just the tappable page numbers remain.
+  // covers single-page stepping, and the extra icon row eats too much width
+  // on a phone screen for what it adds. Just the tappable page numbers remain.
   if (mobile) {
     return `
   <div class="pagination-bar">
@@ -931,23 +869,23 @@ function renderPaginationBar(filteredLen) {
   <div class="pagination-bar">
     <button class="page-nav-btn" data-action="page-first" ${
       atFirst ? 'disabled' : ''
-    } aria-label="맨 처음 페이지">⏮</button>
+    } aria-label="맨 처음 페이지">${icon('chevrons-left', 15)}</button>
     <button class="page-nav-btn" data-action="page-back5" ${
       atFirst ? 'disabled' : ''
-    } aria-label="5페이지 뒤로">⏪</button>
+    } aria-label="5페이지 뒤로">${icon('rewind', 15)}</button>
     <button class="page-nav-btn" data-action="page-prev" ${
       atFirst ? 'disabled' : ''
-    } aria-label="이전 페이지">◀</button>
+    } aria-label="이전 페이지">${icon('chevron-left', 15)}</button>
     <div class="page-num-list">${pageButtons}</div>
     <button class="page-nav-btn" data-action="page-next" ${
       atLast ? 'disabled' : ''
-    } aria-label="다음 페이지">▶</button>
+    } aria-label="다음 페이지">${icon('chevron-right', 15)}</button>
     <button class="page-nav-btn" data-action="page-fwd5" ${
       atLast ? 'disabled' : ''
-    } aria-label="5페이지 앞으로">⏩</button>
+    } aria-label="5페이지 앞으로">${icon('fast-forward', 15)}</button>
     <button class="page-nav-btn" data-action="page-last" ${
       atLast ? 'disabled' : ''
-    } aria-label="맨 마지막 페이지">⏭</button>
+    } aria-label="맨 마지막 페이지">${icon('chevrons-right', 15)}</button>
   </div>`;
 }
 
@@ -962,12 +900,18 @@ function renderCard(word, index, focused) {
 
   const dictUrl = 'https://dict.naver.com/dict.search?query=' + encodeURIComponent(word.word);
   const importantClass = p.important ? ' important' : '';
+  const bookmarkHtml = `<span class="card-bookmark${
+    p.important ? ' active' : ''
+  }" aria-hidden="true">${icon('bookmark', 15)}</span>`;
   const wordHtml = wordVisible
-    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}">${bookmarkHtml}<span class="card-word-text">${escapeHtml(
         word.word
       )}</span><a class="dict-link" href="${escapeHtml(
         dictUrl
-      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${DICT_SEARCH_ICON}</a></div>`
+      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${icon(
+        'search',
+        14
+      )}</a></div>`
     : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
 
   let meaningsHtml;
@@ -980,9 +924,7 @@ function renderCard(word, index, focused) {
             <div class="meaning-item ${checked ? 'checked' : ''}">
               <button class="check-btn ${checked ? 'checked' : ''}" data-action="toggle-checked" data-id="${escapeHtml(
                 word.id
-              )}" data-index="${i}" aria-label="${circledNumber(i + 1)}번 뜻 암기 확인">${circledNumber(
-                i + 1
-              )}</button>
+              )}" data-index="${i}" aria-label="${i + 1}번 뜻 암기 확인">${i + 1}</button>
               <div class="meaning-text">
                 ${m.meaning ? `<div class="meaning">${escapeHtml(m.meaning)}</div>` : ''}
                 ${m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
@@ -998,7 +940,7 @@ function renderCard(word, index, focused) {
   return `
   <div class="word-card ${focused ? 'focused' : ''} ${p.memorized ? 'memorized' : ''}" data-action="card-reveal" data-id="${escapeHtml(
     word.id
-  )}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+  )}" data-index="${index}">
     ${wordHtml}
     <div class="card-meanings">${meaningsHtml}</div>
   </div>`;
@@ -1033,7 +975,7 @@ function renderEditableCard(word, p, index, focused) {
   return `
   <div class="word-card editable ${focused ? 'focused' : ''} ${selected ? 'edit-selected' : ''} ${
     p.memorized ? 'memorized' : ''
-  }" data-id="${escapeHtml(word.id)}" data-index="${index}" style="min-height: ${settings.cardHeight}px;">
+  }" data-id="${escapeHtml(word.id)}" data-index="${index}">
     <button class="card-edit-delete" data-action="edit-delete-word" data-id="${escapeHtml(
       word.id
     )}" aria-label="단어 삭제">×</button>
@@ -1070,7 +1012,7 @@ function renderProgressPanel() {
         <div class="cat-stat-header">
           <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
         c.category
-      )}" aria-label="접기/펼치기">▾</button>
+      )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
           <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
         c.category
       )}</span>
@@ -1088,7 +1030,10 @@ function renderProgressPanel() {
   if (settings.progressCollapsed) {
     return `
   <aside class="progress-panel collapsed">
-    <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 펼치기">◂</button>
+    <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 펼치기">${icon(
+      'chevron-left',
+      15
+    )}</button>
   </aside>`;
   }
 
@@ -1096,7 +1041,10 @@ function renderProgressPanel() {
   <aside class="progress-panel">
     <div class="progress-header">
       진행률
-      <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 접기">▸</button>
+      <button class="panel-toggle" data-action="toggle-progress-collapse" aria-label="진행률 접기">${icon(
+        'chevron-right',
+        15
+      )}</button>
     </div>
     <div class="stat-row static">
       <span>전체 개수</span>
@@ -1142,7 +1090,7 @@ function renderExportPanel() {
     <div class="modal">
       <div class="modal-header">
         내보내기
-        <button class="modal-close" data-action="close-export">×</button>
+        <button class="modal-close" data-action="close-export">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">진행 상황</div>
@@ -1194,7 +1142,7 @@ function renderAdvancedSearchPanel() {
     <div class="modal">
       <div class="modal-header">
         고급 검색
-        <button class="modal-close" data-action="close-advanced-search">×</button>
+        <button class="modal-close" data-action="close-advanced-search">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">검색 방식</div>
@@ -1233,7 +1181,7 @@ function renderHelpPanel() {
     <div class="modal">
       <div class="modal-header">
         사용법
-        <button class="modal-close" data-action="close-help">×</button>
+        <button class="modal-close" data-action="close-help">${icon('x', 18)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">PC 단축키</div>
@@ -1251,7 +1199,7 @@ function renderHelpPanel() {
           <li><b>좌우 스와이프</b> (카드 영역) — 페이지 이동</li>
           <li><b>더블탭</b> (카드) — 암기/미암기 체크</li>
           <li><b>길게 누르기</b> (카드) — 중요 체크/해제</li>
-          <li><b>☰ 메뉴</b> — 진행률·분류별 통계, 사용법, 설정</li>
+          <li><b>메뉴 아이콘</b> — 진행률·분류별 통계, 사용법, 설정</li>
         </ul>
       </div>
       <div class="modal-section">
@@ -1259,15 +1207,15 @@ function renderHelpPanel() {
         <ul class="help-list">
           <li>검색창 왼쪽에서 범위 선택 — <b>표제어+뜻</b>(기본) / 표제어 / 뜻</li>
           <li>결과는 단어 분류별로 묶이고, 그 안에서 가나다순으로 정렬됩니다</li>
-          <li><b>⚙ 고급 검색</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
+          <li><b>고급 검색 아이콘</b> — 암기/미암기/중요, 단어 분류로 좁혀서 검색 (분류는 암기·중요 조건과 AND로 결합됩니다)</li>
           <li>기본적으로 검색어를 <b>정규표현식</b>으로 해석합니다. 고급 검색에서 <b>정규식 미사용</b>을 누르면 <code>* . \\</code> 같은 특수문자도 그냥 일반 글자로 검색됩니다</li>
         </ul>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">카드 표시</div>
         <ul class="help-list">
-          <li><b>초록 테두리</b> (카드 전체) — 암기된 단어</li>
-          <li><b>골드 테두리</b> (표제어) — 중요 단어</li>
+          <li><b>스틸 배경 채움</b> (카드 전체) — 암기된 단어</li>
+          <li><b>표제어 밑줄 + 북마크 아이콘</b> — 중요 단어</li>
         </ul>
       </div>
     </div>
@@ -1295,7 +1243,7 @@ function doExport() {
     return;
   }
   const csv = wordsToCSV(matches, progress);
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -1311,63 +1259,6 @@ function doExport() {
   URL.revokeObjectURL(url);
   ui.exportOpen = false;
   render();
-}
-
-// ---------- resize handles ----------
-
-function startResize(kind, startEvent) {
-  startEvent.preventDefault();
-  // On touch, capturing the pointer to the handle keeps move/up events
-  // targeted at this drag even if the finger strays off the thin strip —
-  // touch contact points are far less precise than a mouse cursor.
-  if (startEvent.target && startEvent.target.setPointerCapture) {
-    try {
-      startEvent.target.setPointerCapture(startEvent.pointerId);
-    } catch (err) {
-      // ignore — capture is a reliability nicety, not a requirement
-    }
-  }
-  const startX = startEvent.clientX;
-  const startY = startEvent.clientY;
-
-  const toolbarRow = document.querySelector('.toolbar-row');
-  const mainEl = document.querySelector('.main');
-  const progressPanel = document.querySelector('.progress-panel');
-
-  const startToolbarH = (toolbarRow && toolbarRow.getBoundingClientRect().height) || 56;
-  const startProgressW = (progressPanel && progressPanel.getBoundingClientRect().width) || 260;
-
-  let pending = null;
-
-  function onMove(e) {
-    if (kind === 'resize-toolbar') {
-      const newH = Math.max(56, Math.min(400, startToolbarH + (e.clientY - startY)));
-      if (toolbarRow) {
-        toolbarRow.style.height = newH + 'px';
-        toolbarRow.style.overflowY = 'auto';
-      }
-      pending = newH;
-    } else if (kind === 'resize-progress') {
-      const newW = Math.max(180, Math.min(520, startProgressW - (e.clientX - startX)));
-      if (mainEl) mainEl.style.setProperty('--progress-w', newW + 'px');
-      pending = newW;
-    }
-  }
-
-  function onUp() {
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
-    document.removeEventListener('pointercancel', onUp);
-    if (pending == null) return;
-    if (kind === 'resize-toolbar') settings.toolbarHeight = Math.round(pending);
-    if (kind === 'resize-progress') settings.progressWidth = Math.round(pending);
-    saveSettings(settings);
-    render();
-  }
-
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp);
-  document.addEventListener('pointercancel', onUp);
 }
 
 // ---------- events ----------
@@ -1387,13 +1278,6 @@ document.getElementById('csv-file-input').addEventListener('change', (e) => {
   };
   reader.readAsArrayBuffer(file);
   e.target.value = '';
-});
-
-document.getElementById('app').addEventListener('pointerdown', (e) => {
-  const handle = e.target.closest('[data-action^="resize-"]');
-  if (handle) {
-    startResize(handle.getAttribute('data-action'), e);
-  }
 });
 
 document.getElementById('app').addEventListener('keydown', (e) => {
@@ -1525,14 +1409,14 @@ document.getElementById('app').addEventListener('click', (e) => {
 
   const fontDec = e.target.closest('[data-action="font-size-dec"]');
   if (fontDec) {
-    settings.fontSize = Math.max(10, settings.fontSize - 1);
+    settings.fontSize = Math.max(12, settings.fontSize - 1);
     saveSettings(settings);
     render();
     return;
   }
   const fontInc = e.target.closest('[data-action="font-size-inc"]');
   if (fontInc) {
-    settings.fontSize = Math.min(32, settings.fontSize + 1);
+    settings.fontSize = Math.min(22, settings.fontSize + 1);
     saveSettings(settings);
     render();
     return;
@@ -1845,35 +1729,11 @@ document.addEventListener(
 );
 
 document.getElementById('app').addEventListener('change', (e) => {
-  const fontSelect = e.target.closest('[data-action="select-font"]');
-  if (fontSelect) {
-    settings.font = fontSelect.value;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
-  const widthSelect = e.target.closest('[data-action="select-width"]');
-  if (widthSelect) {
-    settings.widthMode = widthSelect.value;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const modeSelect = e.target.closest('[data-action="select-mode"]');
   if (modeSelect) {
     settings.mode = modeSelect.value;
     saveSettings(settings);
     ui.revealedIds.clear();
-    render();
-    return;
-  }
-
-  const cardHeightSlider = e.target.closest('[data-action="card-height-slider"]');
-  if (cardHeightSlider) {
-    settings.cardHeight = Number(cardHeightSlider.value);
-    saveSettings(settings);
     render();
     return;
   }
