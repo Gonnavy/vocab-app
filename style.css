@@ -10,6 +10,12 @@
   --ink: #1d1f20;
   --steel: #5980a6;
   --steel-txt: #3f6485;
+  /* Steel used as a *filled surface carrying text*. Plain --steel only
+     reaches 4.15:1 against white, so the fill goes a step darker in light
+     mode; in dark mode the fill stays light and the text flips to paper —
+     the same inversion the rest of the palette uses. */
+  --steel-solid: #3f6485;
+  --on-steel-solid: #ffffff;
   --steel-fill: color-mix(in srgb, var(--steel) 8%, var(--paper));
   --steel-soft: color-mix(in srgb, var(--steel) 12%, var(--paper));
   --important-underline: color-mix(in srgb, var(--steel) 45%, var(--paper));
@@ -29,6 +35,8 @@ body.dark {
   --ink: #f0f1f2;
   --steel: #7ea6c9;
   --steel-txt: #7ea6c9;
+  --steel-solid: #7ea6c9;
+  --on-steel-solid: #17181a;
   --steel-fill: color-mix(in srgb, var(--steel) 12%, var(--paper));
   --steel-soft: color-mix(in srgb, var(--steel) 16%, var(--paper));
   --important-underline: color-mix(in srgb, var(--steel) 55%, var(--paper));
@@ -208,9 +216,9 @@ svg.lucide {
 }
 
 .btn-primary {
-  background: var(--steel);
-  border-color: var(--steel);
-  color: #fff;
+  background: var(--steel-solid);
+  border-color: var(--steel-solid);
+  color: var(--on-steel-solid);
 }
 
 .btn-primary:hover {
@@ -485,9 +493,12 @@ svg.lucide {
   color: var(--ink);
 }
 
+/* README: "페이지네이션(현재 페이지 = 잉크 채움)" — ink, not steel. Also the
+   highest-contrast pairing available, which is what this small 12px label
+   needs. */
 .page-num-btn.current {
-  background: var(--steel);
-  color: #fff;
+  background: var(--ink);
+  color: var(--paper);
   font-weight: 700;
 }
 
@@ -686,6 +697,36 @@ svg.lucide {
   cursor: grabbing;
 }
 
+/* Keyboard/single-pointer alternative to the drag grip (WCAG 2.2 AA). */
+.edit-meaning-move {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: column;
+  padding-top: 2px;
+}
+
+.edit-meaning-move-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.edit-meaning-move-btn:hover:not(:disabled) {
+  color: var(--steel-txt);
+}
+
+.edit-meaning-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .edit-meaning-index {
   flex: 0 0 auto;
   padding-top: 8px;
@@ -750,8 +791,8 @@ svg.lucide {
   padding: 10px;
   border: none;
   border-radius: 0;
-  background: var(--steel);
-  color: #fff;
+  background: var(--steel-solid);
+  color: var(--on-steel-solid);
   font-weight: 600;
   cursor: pointer;
 }
@@ -802,15 +843,21 @@ svg.lucide {
 /* Leading square = the memorize toggle (see renderCard). PC shows it only
    once memorized, matching the documented "표제어 앞 9px 스틸 사각"; mobile
    always shows it and gives it a real touch target. */
+/* Hit area is padded out to the WCAG 2.2 AA 24px minimum while the square
+   itself stays 9px — negative margin keeps the extra padding from shifting
+   the headword's optical alignment. */
 .card-memo-toggle {
   grid-column: 1;
   justify-self: start;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin: -8px 0 -8px -7px;
   border: none;
   background: transparent;
   padding: 0;
-  margin: 0;
   cursor: pointer;
 }
 
@@ -851,6 +898,9 @@ svg.lucide {
 .card-bookmark {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   border: none;
   background: transparent;
   padding: 4px;
@@ -877,6 +927,9 @@ svg.lucide {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   color: var(--muted);
   opacity: 0.5;
   transition: opacity 0.15s ease, color 0.15s ease;
@@ -1301,6 +1354,9 @@ svg.lucide {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin-left: -4px;
   border: none;
   background: transparent;
   color: var(--muted);
@@ -1321,6 +1377,9 @@ svg.lucide {
 .cat-stat-name {
   flex: 0 1 auto;
   min-width: 0;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1387,6 +1446,7 @@ svg.lucide {
 
 /* ---------- export / advanced-search / help modals ---------- */
 
+/* Clicking the dimmed area closes the modal, so it has to read as clickable. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1395,6 +1455,11 @@ svg.lucide {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  cursor: pointer;
+}
+
+.modal-backdrop .modal {
+  cursor: auto;
 }
 
 .modal {
@@ -1476,9 +1541,9 @@ svg.lucide {
    due — a distinct accent from the ink-filled toggles above */
 .chip-btn.due-active,
 .drawer-settings-btn.due-active {
-  background: var(--steel);
-  border-color: var(--steel);
-  color: #fff;
+  background: var(--steel-solid);
+  border-color: var(--steel-solid);
+  color: var(--on-steel-solid);
 }
 
 .modal-empty {
@@ -2102,6 +2167,21 @@ body.is-mobile .word-card {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Users who ask the OS for less motion get the end state immediately —
+   riseIn, theme fades, hover transitions and the drag opacity shift all
+   collapse to their final value rather than animating. Kept as one blanket
+   rule so nothing new can quietly opt out of it later. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes riseIn {

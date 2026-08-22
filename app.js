@@ -220,6 +220,33 @@ function undoEdit() {
 // even across different fields/rows — collapses into a single undo step.
 // Only the first keystroke after 1.2s of quiet pushes a snapshot; the
 // pending timer just marks "still mid-burst".
+// Single reorder path shared by the drag handler and the ↑/↓ buttons —
+// WCAG 2.2 AA requires a non-drag way to do any author-controlled drag
+// operation, and routing both through here keeps the two from drifting
+// apart (numbering, checked state, and undo snapshot all move together).
+// toIndex is the final position *after* the item is removed.
+function moveMeaning(id, fromIndex, toIndex) {
+  const w = words.find((x) => x.id === id);
+  if (!w) return false;
+  if (toIndex < 0 || toIndex >= w.meanings.length || toIndex === fromIndex) return false;
+
+  pushEditHistory();
+  const [movedMeaning] = w.meanings.splice(fromIndex, 1);
+  w.meanings.splice(toIndex, 0, movedMeaning);
+
+  // checked state (and thus each meaning's numbering) rides along with it
+  const p = progress[id];
+  if (p && Array.isArray(p.checked)) {
+    const [movedChecked] = p.checked.splice(fromIndex, 1);
+    p.checked.splice(toIndex, 0, movedChecked);
+  }
+
+  saveWords(words);
+  saveProgress(progress);
+  render();
+  return true;
+}
+
 let editHistoryTypingTimer = null;
 
 function noteEditHistoryTyping() {
@@ -1444,6 +1471,19 @@ function renderEditableRow(word, p, index) {
           'grip-vertical',
           15
         )}</span>
+        <span class="edit-meaning-move">
+          <button type="button" class="edit-meaning-move-btn" data-action="move-meaning-up" data-id="${escapeHtml(
+            word.id
+          )}" data-index="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${i + 1}번 뜻 위로">${icon(
+        'chevron-up',
+        14
+      )}</button>
+          <button type="button" class="edit-meaning-move-btn" data-action="move-meaning-down" data-id="${escapeHtml(
+            word.id
+          )}" data-index="${i}" ${i === meanings.length - 1 ? 'disabled' : ''} aria-label="${
+        i + 1
+      }번 뜻 아래로">${icon('chevron-down', 14)}</button>
+        </span>
         <span class="edit-meaning-index">${i + 1}</span>
         <div class="edit-meaning-fields">
           <textarea class="edit-field edit-meaning-input" rows="1" data-action="edit-meaning" data-id="${escapeHtml(
@@ -2020,6 +2060,15 @@ document.getElementById('app').addEventListener('click', (e) => {
         if (field) field.focus();
       });
     }
+    return;
+  }
+
+  const moveMeaningBtn = e.target.closest('[data-action="move-meaning-up"], [data-action="move-meaning-down"]');
+  if (moveMeaningBtn) {
+    const id = moveMeaningBtn.getAttribute('data-id');
+    const from = Number(moveMeaningBtn.getAttribute('data-index'));
+    const dir = moveMeaningBtn.getAttribute('data-action') === 'move-meaning-up' ? -1 : 1;
+    moveMeaning(id, from, from + dir);
     return;
   }
 
@@ -2688,24 +2737,8 @@ document.getElementById('app').addEventListener('focusout', (e) => {
     const before = e.clientY - rect.top < rect.height / 2;
     let toIndex = before ? overIndex : overIndex + 1;
     if (toIndex === fromIndex || toIndex === fromIndex + 1) return; // dropped back where it started
-
-    const w = words.find((x) => x.id === id);
-    if (!w) return;
-    pushEditHistory();
-    const [movedMeaning] = w.meanings.splice(fromIndex, 1);
-    if (toIndex > fromIndex) toIndex -= 1; // the splice above shifted everything after fromIndex left by one
-    w.meanings.splice(toIndex, 0, movedMeaning);
-
-    // checked state (and thus each meaning's numbering) rides along with it
-    const p = progress[id];
-    if (p && Array.isArray(p.checked)) {
-      const [movedChecked] = p.checked.splice(fromIndex, 1);
-      p.checked.splice(toIndex, 0, movedChecked);
-    }
-
-    saveWords(words);
-    saveProgress(progress);
-    render();
+    if (toIndex > fromIndex) toIndex -= 1; // removal shifts everything after fromIndex left by one
+    moveMeaning(id, fromIndex, toIndex);
   });
 
   appEl.addEventListener('dragend', () => {
