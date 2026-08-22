@@ -62,7 +62,6 @@ const DEFAULT_SETTINGS = {
   count: 3, // 1-15, cards per feed page
   examples: true, // show/hide example sentences on cards
   device: 'auto', // 'auto' | 'pc' | 'mobile' — 'auto' follows the real viewport; the toolbar toggle forces the other one
-  toolbarCollapsed: false,
   progressCollapsed: false,
 };
 

@@ -101,17 +101,6 @@ function resyncProgress(list) {
   if (changed) saveProgress(progress);
 }
 
-// 보기 드로어의 "진행률 초기화" — every word's study state (memorized/
-// important/checked/SRS stage+due) back to its defaults. Words themselves
-// and their categories/meanings are untouched.
-function resetAllProgress() {
-  for (const w of words) {
-    progress[w.id] = defaultProgressFor(w);
-  }
-  saveProgress(progress);
-  render();
-}
-
 function setWords(newWords) {
   words = newWords;
   resyncProgress(words);
@@ -704,6 +693,9 @@ function render() {
     renderMobileTopBar() +
     renderMobileProgressStrips() +
     renderToolbar() +
+    // Outside the toolbar so it still appears on mobile, where the toolbar
+    // itself is hidden and the drawer is opened from the top bar instead.
+    (ui.viewDrawerOpen ? renderViewDrawer() : '') +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
@@ -765,8 +757,13 @@ function renderMobileTopBar() {
     <span class="mobile-topbar-title">단어장</span>
     <span class="mobile-word-count">${words.length} WORDS</span>
     <span class="mobile-progress-num">${stats.memoRate}<span class="unit">%</span></span>
-    ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+    <span class="mobile-topbar-actions">
+      ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
+      <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+      <button class="mobile-view-btn ${
+        ui.viewDrawerOpen ? 'active' : ''
+      }" data-action="toggle-view-drawer" aria-label="보기 설정">${icon('sliders-horizontal', 17)}</button>
+    </span>
   </div>`;
 }
 
@@ -866,9 +863,18 @@ function renderSessionView() {
   const word = words.find((w) => w.id === id);
   const p = progress[id] || defaultProgressFor(word);
 
-  const stripHtml = s.queue
-    .map((_, i) => `<div class="session-strip-cell ${i < s.i ? 'done' : ''}"></div>`)
-    .join('');
+  // One cell per queued word only while that stays a sane number of nodes —
+  // a 3000-word queue would emit 3000 cells whose gaps alone are wider than
+  // the screen, which stretched the whole session box and pushed the close
+  // button off-view. Past the cap the strip becomes proportional instead.
+  const STRIP_MAX_CELLS = 40;
+  const stripCells = Math.min(s.queue.length, STRIP_MAX_CELLS);
+  const stripDone =
+    s.queue.length <= STRIP_MAX_CELLS ? s.i : Math.floor((s.i / s.queue.length) * STRIP_MAX_CELLS);
+  const stripHtml = Array.from(
+    { length: stripCells },
+    (_, i) => `<div class="session-strip-cell ${i < stripDone ? 'done' : ''}"></div>`
+  ).join('');
 
   const bodyHtml = s.revealed
     ? `<div class="session-meanings">${word.meanings
@@ -1089,7 +1095,6 @@ function renderMobileSettingsView() {
           })
           .join('')}
       </div>
-      <button class="btn" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">단어 편집</div>
@@ -1116,16 +1121,6 @@ function renderModeSegment() {
 
 function renderToolbar() {
   const dueTodayCount = countDueToday();
-
-  if (settings.toolbarCollapsed) {
-    return `
-  <div class="toolbar collapsed">
-    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">${icon(
-      'chevron-down',
-      15
-    )} 설정</button>
-  </div>`;
-  }
 
   return `
   <div class="toolbar">
@@ -1167,13 +1162,8 @@ function renderToolbar() {
     'pencil',
     15
   )} 편집 모드</button>
-        <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
-          'chevron-up',
-          15
-        )} 접기</button>
       </div>
     </div>
-    ${ui.viewDrawerOpen ? renderViewDrawer() : ''}
   </div>`;
 }
 
@@ -1199,7 +1189,6 @@ function renderViewDrawer() {
           .join('')}
       </div>
     </div>
-    <button class="btn view-drawer-reset" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
   </div>`;
 }
 
@@ -1970,14 +1959,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const toolbarCollapseBtn = e.target.closest('[data-action="toggle-toolbar-collapse"]');
-  if (toolbarCollapseBtn) {
-    settings.toolbarCollapsed = !settings.toolbarCollapsed;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const progressCollapseBtn = e.target.closest('[data-action="toggle-progress-collapse"]');
   if (progressCollapseBtn) {
     settings.progressCollapsed = !settings.progressCollapsed;
@@ -2285,14 +2266,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     deactivateShuffle();
     resetPaging();
     render();
-    return;
-  }
-
-  const resetProgressBtn = e.target.closest('[data-action="reset-progress"]');
-  if (resetProgressBtn) {
-    if (confirm('모든 단어의 진행률(암기·중요·복습 일정)을 초기화하시겠습니까?')) {
-      resetAllProgress();
-    }
     return;
   }
 

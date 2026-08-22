@@ -111,12 +111,11 @@ svg.lucide {
   vertical-align: middle;
 }
 
-/* README's PC reference frame is 1180–1400 wide; the page centers inside
-   that and the grids below divide whatever width results. */
+/* Full viewport width on PC — no centered max-width column. */
 #app {
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0;
   padding: 30px 34px 44px;
   display: flex;
   flex-direction: column;
@@ -200,19 +199,17 @@ svg.lucide {
   color: var(--paper);
 }
 
+/* Now a sibling of .toolbar rather than a child (so it also shows on mobile,
+   where the toolbar is hidden) — hence its own bottom rule instead of
+   relying on the toolbar's box. */
 .view-drawer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 24px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule-soft);
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule-soft);
   animation: riseIn 0.15s ease-out;
-}
-
-.view-drawer-reset {
-  margin-left: auto;
 }
 
 .btn {
@@ -231,6 +228,28 @@ svg.lucide {
 .btn:hover {
   border-color: var(--steel);
   color: var(--steel-txt);
+}
+
+/* System-bar buttons go borderless — icon + label already carry the
+   affordance there, and the boxes were pure noise across a full-width bar.
+   Scoped to .toolbar so the session's outlined "다시 보기" and the modal
+   chip groups, where the border IS the affordance, keep theirs. */
+.toolbar .btn,
+.toolbar .chip-btn {
+  border-color: transparent;
+  background: transparent;
+}
+
+.toolbar .btn:hover,
+.toolbar .chip-btn:hover {
+  border-color: transparent;
+  color: var(--steel-txt);
+}
+
+/* filled states (active toggle, 오늘 복습) keep their fill */
+.toolbar .chip-btn.active,
+.toolbar .chip-btn.due-active {
+  border-color: transparent;
 }
 
 .btn-primary {
@@ -261,30 +280,35 @@ svg.lucide {
   color: var(--ink);
 }
 
+/* Borderless, tightly grouped around the value — gap:0 plus a narrow value
+   column pulls − and + in close instead of leaving them floating. */
 .stepper {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
 }
 
 .stepper button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
+  padding: 0;
   border-radius: 0;
-  border: 1px solid var(--rule);
-  background: var(--paper);
+  border: none;
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
   line-height: 1;
 }
 
 .stepper button:hover {
-  border-color: var(--steel);
   color: var(--steel-txt);
 }
 
 .stepper-value {
-  min-width: 1.5em;
+  min-width: 1.1em;
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-family: var(--font-heading);
@@ -842,9 +866,17 @@ svg.lucide {
   background: var(--danger-soft);
 }
 
+/* Side tracks share one min width so they stay symmetric and the headword
+   reads as centered; the middle track is minmax(0,1fr) so it can actually
+   shrink — that's what lets a long headword wrap instead of pushing the
+   bookmark/search icons out past the card edge. */
 .card-word {
+  --card-word-side: 54px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns:
+    minmax(var(--card-word-side), auto)
+    minmax(0, 1fr)
+    minmax(var(--card-word-side), auto);
   align-items: center;
   column-gap: 6px;
   font-size: 26px;
@@ -889,11 +921,15 @@ svg.lucide {
   background: var(--steel);
 }
 
+/* Long headwords (proverbs) wrap inside the card. keep-all keeps Korean
+   breaking at word boundaries rather than mid-word; overflow-wrap is the
+   last-resort escape for a single token wider than the column. No nowrap —
+   that was what pushed long headwords past the card edge. */
 .card-word-text {
   grid-column: 2;
+  min-width: 0;
   text-align: center;
   word-break: keep-all;
-  white-space: nowrap;
   overflow-wrap: anywhere;
 }
 
@@ -1128,10 +1164,6 @@ svg.lucide {
   padding: 10px 4px;
 }
 
-.toolbar.collapsed {
-  padding: 8px 16px;
-}
-
 .progress-header {
   display: flex;
   align-items: center;
@@ -1270,20 +1302,26 @@ svg.lucide {
   margin-bottom: 14px;
 }
 
+/* The bars are bottom-aligned in a fixed-height row and each carries a count
+   label above it, so the whole block grows upward — the title needs real
+   clearance beneath it or the tallest bar's number rides up into it. */
 .forecast-title {
   font-family: var(--font-heading);
   font-size: 0.78em;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
+/* min-height, not height: a column is bar(<=48) + count + day label, which
+   is taller than any fixed 66px box — with a hard height the extra spilled
+   upward over the section title. */
 .forecast-bars {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  height: 66px;
+  min-height: 66px;
 }
 
 .forecast-bar-value {
@@ -1638,7 +1676,12 @@ svg.lucide {
   grid-template-columns: 1fr;
 }
 
+/* Centered card of its own width — the feed's full-bleed width would leave
+   the border running to the far edge of a wide screen. */
 .session-screen {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   border: 1px solid var(--rule);
   padding: 26px 30px 30px;
   animation: riseIn 0.18s ease-out;
@@ -1663,10 +1706,12 @@ svg.lucide {
 }
 
 .session-strip {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   gap: 3px;
   height: 6px;
+  overflow: hidden;
 }
 
 .session-strip-cell {
@@ -1888,12 +1933,40 @@ body.is-mobile .mobile-word-count {
   color: var(--muted);
 }
 
+/* Sits directly after "N WORDS"; the action cluster takes the auto margin
+   instead so it stays pinned right. */
 body.is-mobile .mobile-progress-num {
-  margin-left: auto;
+  flex: 0 0 auto;
   font-family: var(--font-heading);
   font-size: 22px;
   font-weight: 600;
   line-height: 1;
+}
+
+body.is-mobile .mobile-topbar-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+body.is-mobile .mobile-view-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+body.is-mobile .mobile-view-btn.active {
+  color: var(--steel-txt);
 }
 
 body.is-mobile .mobile-progress-num .unit {
@@ -2513,7 +2586,6 @@ const DEFAULT_SETTINGS = {
   count: 3, // 1-15, cards per feed page
   examples: true, // show/hide example sentences on cards
   device: 'auto', // 'auto' | 'pc' | 'mobile' — 'auto' follows the real viewport; the toolbar toggle forces the other one
-  toolbarCollapsed: false,
   progressCollapsed: false,
 };
 
@@ -2685,17 +2757,6 @@ function resyncProgress(list) {
     }
   }
   if (changed) saveProgress(progress);
-}
-
-// 보기 드로어의 "진행률 초기화" — every word's study state (memorized/
-// important/checked/SRS stage+due) back to its defaults. Words themselves
-// and their categories/meanings are untouched.
-function resetAllProgress() {
-  for (const w of words) {
-    progress[w.id] = defaultProgressFor(w);
-  }
-  saveProgress(progress);
-  render();
 }
 
 function setWords(newWords) {
@@ -3290,6 +3351,9 @@ function render() {
     renderMobileTopBar() +
     renderMobileProgressStrips() +
     renderToolbar() +
+    // Outside the toolbar so it still appears on mobile, where the toolbar
+    // itself is hidden and the drawer is opened from the top bar instead.
+    (ui.viewDrawerOpen ? renderViewDrawer() : '') +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
@@ -3351,8 +3415,13 @@ function renderMobileTopBar() {
     <span class="mobile-topbar-title">단어장</span>
     <span class="mobile-word-count">${words.length} WORDS</span>
     <span class="mobile-progress-num">${stats.memoRate}<span class="unit">%</span></span>
-    ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+    <span class="mobile-topbar-actions">
+      ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
+      <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+      <button class="mobile-view-btn ${
+        ui.viewDrawerOpen ? 'active' : ''
+      }" data-action="toggle-view-drawer" aria-label="보기 설정">${icon('sliders-horizontal', 17)}</button>
+    </span>
   </div>`;
 }
 
@@ -3452,9 +3521,18 @@ function renderSessionView() {
   const word = words.find((w) => w.id === id);
   const p = progress[id] || defaultProgressFor(word);
 
-  const stripHtml = s.queue
-    .map((_, i) => `<div class="session-strip-cell ${i < s.i ? 'done' : ''}"></div>`)
-    .join('');
+  // One cell per queued word only while that stays a sane number of nodes —
+  // a 3000-word queue would emit 3000 cells whose gaps alone are wider than
+  // the screen, which stretched the whole session box and pushed the close
+  // button off-view. Past the cap the strip becomes proportional instead.
+  const STRIP_MAX_CELLS = 40;
+  const stripCells = Math.min(s.queue.length, STRIP_MAX_CELLS);
+  const stripDone =
+    s.queue.length <= STRIP_MAX_CELLS ? s.i : Math.floor((s.i / s.queue.length) * STRIP_MAX_CELLS);
+  const stripHtml = Array.from(
+    { length: stripCells },
+    (_, i) => `<div class="session-strip-cell ${i < stripDone ? 'done' : ''}"></div>`
+  ).join('');
 
   const bodyHtml = s.revealed
     ? `<div class="session-meanings">${word.meanings
@@ -3675,7 +3753,6 @@ function renderMobileSettingsView() {
           })
           .join('')}
       </div>
-      <button class="btn" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">단어 편집</div>
@@ -3702,16 +3779,6 @@ function renderModeSegment() {
 
 function renderToolbar() {
   const dueTodayCount = countDueToday();
-
-  if (settings.toolbarCollapsed) {
-    return `
-  <div class="toolbar collapsed">
-    <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 펼치기">${icon(
-      'chevron-down',
-      15
-    )} 설정</button>
-  </div>`;
-  }
 
   return `
   <div class="toolbar">
@@ -3753,13 +3820,8 @@ function renderToolbar() {
     'pencil',
     15
   )} 편집 모드</button>
-        <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
-          'chevron-up',
-          15
-        )} 접기</button>
       </div>
     </div>
-    ${ui.viewDrawerOpen ? renderViewDrawer() : ''}
   </div>`;
 }
 
@@ -3785,7 +3847,6 @@ function renderViewDrawer() {
           .join('')}
       </div>
     </div>
-    <button class="btn view-drawer-reset" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
   </div>`;
 }
 
@@ -4556,14 +4617,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const toolbarCollapseBtn = e.target.closest('[data-action="toggle-toolbar-collapse"]');
-  if (toolbarCollapseBtn) {
-    settings.toolbarCollapsed = !settings.toolbarCollapsed;
-    saveSettings(settings);
-    render();
-    return;
-  }
-
   const progressCollapseBtn = e.target.closest('[data-action="toggle-progress-collapse"]');
   if (progressCollapseBtn) {
     settings.progressCollapsed = !settings.progressCollapsed;
@@ -4871,14 +4924,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     deactivateShuffle();
     resetPaging();
     render();
-    return;
-  }
-
-  const resetProgressBtn = e.target.closest('[data-action="reset-progress"]');
-  if (resetProgressBtn) {
-    if (confirm('모든 단어의 진행률(암기·중요·복습 일정)을 초기화하시겠습니까?')) {
-      resetAllProgress();
-    }
     return;
   }
 
