@@ -1,16 +1,6 @@
 // Main application: state, rendering, event handling.
 // Relies on globals from csv.js and store.js (no bundler / plain <script> includes).
 
-const CARD_GAP = 12;
-const CARD_MIN_WIDTH = 270; // floor for the always-on fit-to-width calculation
-
-// Card width is no longer a stored preference — it's recomputed every
-// render() from the available width and column count (see render()), so
-// cards always exactly fill the row regardless of viewport size, cols, or
-// count. Kept as a module-level var (not persisted) purely so
-// renderFeedPanel() can read whatever render() just computed.
-let currentCardWidth = CARD_MIN_WIDTH;
-
 let words = loadWords();
 let progress = loadProgress();
 let settings = loadSettings();
@@ -30,9 +20,11 @@ const ui = {
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
   mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
   helpOpen: false,
+  viewDrawerOpen: false, // toolbar's sliders-horizontal toggle — font size/examples/filter/reset
   editMode: false,
   editSelectedIds: new Set(), // word ids marked (via drag) for bulk delete while editing
   editHistory: [], // {words, progress} snapshots, most-recent last — reset each time edit mode is entered
+  session: null, // { queue: id[], i, revealed, known, again, finished } | null — see startSession()
   search: {
     query: '',
     scope: 'word-meaning', // 'word-meaning' | 'word' | 'meaning'
@@ -64,13 +56,25 @@ function resyncProgress(list) {
     seen.add(w.id);
 
     // A CSV carrying progress columns (e.g. exported from another device)
-    // always wins for words it names — that's the point of syncing.
+    // always wins for words it names — that's the point of syncing. The
+    // CSV format has no stage/due (see csv.js), so those aren't part of what
+    // "wins" here — carry over the existing SRS schedule if there was one,
+    // otherwise fall back to the same defaults the migration in store.js
+    // uses for a word with no history.
     if (w.importedProgress) {
       const ip = w.importedProgress;
+      const existing = progress[w.id];
+      const memorized = Boolean(ip.memorized);
       progress[w.id] = {
-        memorized: Boolean(ip.memorized),
+        memorized,
         important: Boolean(ip.important),
         checked: w.meanings.map((_, i) => Boolean(ip.checked[i])),
+        stage: existing ? existing.stage : memorized ? 2 : 0,
+        due: existing
+          ? existing.due
+          : memorized
+          ? todayMidnight() + SRS_INTERVAL_DAYS[1] * DAY_MS
+          : todayMidnight(),
       };
       changed = true;
       continue;
@@ -95,6 +99,17 @@ function resyncProgress(list) {
     }
   }
   if (changed) saveProgress(progress);
+}
+
+// 보기 드로어의 "진행률 초기화" — every word's study state (memorized/
+// important/checked/SRS stage+due) back to its defaults. Words themselves
+// and their categories/meanings are untouched.
+function resetAllProgress() {
+  for (const w of words) {
+    progress[w.id] = defaultProgressFor(w);
+  }
+  saveProgress(progress);
+  render();
 }
 
 function setWords(newWords) {
@@ -235,10 +250,28 @@ function isMemorized(word) {
 // Shared by every trigger for these two toggles — PC keyboard shortcuts
 // (Space/Enter) and mobile gestures (double-tap/long-press) alike, since
 // there's no longer a button in the card markup to hang a click handler on.
+// Memorized and the per-meaning checks are two views of the same judgment,
+// so they're kept in lockstep in both directions: flipping the word-level
+// toggle drives every check to that value (here), and checking the last
+// remaining meaning flips the word to memorized (see setMeaningChecked).
 function toggleMemorized(id) {
   const p = progress[id];
   if (!p) return;
   p.memorized = !p.memorized;
+  if (Array.isArray(p.checked)) p.checked = p.checked.map(() => p.memorized);
+  saveProgress(progress);
+  render();
+}
+
+// The other half of that pairing. Only *completing* the set turns memorized
+// on, and unchecking any one turns it back off — so the word-level state
+// never claims more than the checks actually support.
+function setMeaningChecked(id, index, value) {
+  const p = progress[id];
+  if (!p || !Array.isArray(p.checked)) return;
+  p.checked[index] = value;
+  const total = p.checked.length;
+  p.memorized = total > 0 && p.checked.every(Boolean);
   saveProgress(progress);
   render();
 }
@@ -258,6 +291,23 @@ function toggleImportant(id) {
 function barFilledCount(count, total) {
   if (!total) return 0;
   return Math.floor(((count / total) * 100) / 5);
+}
+
+// 7 buckets — today, +1 .. +6 — counting how many words are due on each of
+// the next 7 calendar days. Anything already overdue (due before today's
+// start — shouldn't normally happen, but "다시 보기" sets due=now which can
+// be any moment today) lands in the "today" bucket rather than being
+// dropped or going negative.
+function computeForecast() {
+  const midnight = todayMidnight();
+  const counts = new Array(7).fill(0);
+  for (const w of words) {
+    const p = progress[w.id];
+    if (!p) continue;
+    const dayOffset = Math.floor((p.due - midnight) / DAY_MS);
+    counts[Math.max(0, Math.min(6, dayOffset))]++;
+  }
+  return counts;
 }
 
 function computeStats() {
@@ -291,7 +341,83 @@ function computeStats() {
     importantRate: total ? Math.round((important / total) * 100) : 0,
     importantBarFilled: barFilledCount(important, total),
     byCategory,
+    forecast: computeForecast(),
   };
+}
+
+// ---------- SRS (spaced repetition) ----------
+
+// Strictly "due right now" — no fallback — so the toolbar/drawer badge
+// never counts words that only show up because the queue would otherwise
+// be empty (see dueWords() below, which does fall back).
+function countDueToday() {
+  const now = Date.now();
+  return words.filter((w) => progress[w.id] && progress[w.id].due <= now).length;
+}
+
+// The actual session queue: due words first (earliest due first), or — if
+// nothing is due — unmemorized words, so a caught-up learner can still
+// start a session instead of hitting an empty one.
+function dueWords() {
+  const now = Date.now();
+  const due = words.filter((w) => progress[w.id] && progress[w.id].due <= now);
+  if (due.length) return due.sort((a, b) => progress[a.id].due - progress[b.id].due);
+  return words.filter((w) => !isMemorized(w));
+}
+
+function startSession() {
+  const queue = dueWords().map((w) => w.id);
+  if (!queue.length) return;
+  ui.session = { queue, i: 0, revealed: false, known: 0, again: 0, finished: false };
+  ui.editMode = false; // a session and the edit table don't coexist
+  ui.mobileDrawerOpen = false;
+  render();
+}
+
+function sessionReveal() {
+  const s = ui.session;
+  if (!s || s.finished) return;
+  s.revealed = true;
+  render();
+}
+
+function advanceSession() {
+  const s = ui.session;
+  s.i++;
+  s.revealed = false;
+  if (s.i >= s.queue.length) s.finished = true;
+  render();
+}
+
+function sessionKnow() {
+  const s = ui.session;
+  if (!s || s.finished) return;
+  const p = progress[s.queue[s.i]];
+  if (p) {
+    p.stage = Math.min(6, p.stage + 1);
+    p.due = Date.now() + SRS_INTERVAL_DAYS[p.stage - 1] * DAY_MS;
+    saveProgress(progress);
+  }
+  s.known++;
+  advanceSession();
+}
+
+function sessionAgain() {
+  const s = ui.session;
+  if (!s || s.finished) return;
+  const p = progress[s.queue[s.i]];
+  if (p) {
+    p.stage = 0;
+    p.due = Date.now();
+    saveProgress(progress);
+  }
+  s.again++;
+  advanceSession();
+}
+
+function endSession() {
+  ui.session = null;
+  render();
 }
 
 function matchesFilter(word, filter) {
@@ -509,8 +635,12 @@ function icon(name, size) {
 
 function render() {
   document.body.classList.toggle('dark', settings.darkMode);
+  document.body.classList.toggle('force-mobile', settings.device === 'mobile');
+  document.body.classList.toggle('force-pc', settings.device === 'pc');
 
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
+
+  const app = document.getElementById('app');
 
   const filtered = getDisplayWords();
   clampStartIndex(filtered.length);
@@ -519,59 +649,21 @@ function render() {
     ui.focusedIndex = windowWords.length ? windowWords.length - 1 : null;
   }
 
-  const progressW = settings.progressCollapsed ? 40 : 260;
-  const app = document.getElementById('app');
+  // Progress panel is a fixed-width column of the 2-column .main grid; the
+  // feed takes the remaining 1fr. Cards inside the feed are minmax(0,1fr)
+  // tracks, so nothing here needs to solve for a card width in pixels —
+  // #app just gets a max-width from CSS and the grid divides what's left.
+  const progressW = settings.progressCollapsed ? 40 : 268;
 
-  // documentElement.clientWidth (not CSS 100vw) — vw is defined off the
-  // initial containing block and in practice doesn't subtract the vertical
-  // scrollbar's own width, so a vw-based cap can still let the app render a
-  // few px wider than what's actually available, which is exactly enough
-  // to trigger a horizontal scrollbar. clientWidth is a real post-layout
-  // measurement that already excludes the scrollbar — freshly read every
-  // render, so it also reacts correctly when a `count`/`cols` change adds
-  // or removes enough page height to toggle the scrollbar on or off.
-  const viewportCap = document.documentElement.clientWidth - 24;
+  const mainInnerHtml = ui.session
+    ? renderSessionView()
+    : renderFeedPanel(filtered, windowWords) + renderProgressPanel();
 
-  if (ui.editMode) {
-    // The edit table wants the full available width (120px/190px/1fr
-    // columns, not a fitted row of N cards), so skip the card-width fit
-    // entirely here — currentCardWidth is simply left stale until the next
-    // non-edit render recomputes it.
-    app.style.width = viewportCap + 'px';
-  } else {
-    // Card width is always computed to exactly fill the row — no manual
-    // width slider or fit-toggle anymore (see the currentCardWidth note up
-    // top). This solves directly for the card width that makes the cards
-    // fill the target width, using the same chrome terms (#app/feed-panel
-    // padding, main gaps+handle, progress panel) the width is built from
-    // below, so there's no measure-the-rendered-DOM-then-fix-it-up step —
-    // it's correct in one pass.
-    // +4px: measured empirically — the .cards padding/negative-margin trick
-    // (for focus-ring room) resolves a couple px tighter in practice than
-    // the arithmetic here predicts, and without this slack the grid can end
-    // up ~2px wider than its container and trigger a horizontal scrollbar.
-    const nonCardsChrome = 16 * 2 + 16 + progressW + 16 * 2; // feed-panel pad + main gap + progress panel + #app pad
-    const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
-    const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
-    currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
-
-    // #app is sized to exactly wrap the now-computed cards, capped at the
-    // viewport so it never forces page-level horizontal scroll, and centered
-    // via margin:auto. Setting an explicit width here (rather than relying
-    // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
-    // quirks that didn't reliably propagate the card grid's width up through
-    // .main / .feed-nav in testing — with a definite width the grid's own
-    // tracks size normally.
-    const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
-    const appWidth = cardsWidth + nonCardsChrome;
-    app.style.width = Math.min(appWidth, viewportCap) + 'px';
-  }
   app.innerHTML =
     renderMobileTopBar() +
     renderToolbar() +
-    `<div class="main" style="--progress-w: ${progressW}px;">` +
-    renderFeedPanel(filtered, windowWords) +
-    renderProgressPanel() +
+    `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
+    mainInnerHtml +
     '</div>' +
     renderMobileDrawer() +
     (ui.exportOpen ? renderExportPanel() : '') +
@@ -607,12 +699,26 @@ function autoResizeEditFields() {
   document.querySelectorAll('.edit-field').forEach(autoResizeField);
 }
 
+// Label/icon always show the DESTINATION — what clicking switches you TO —
+// never the current state. Showing "PC" while already on PC (a real past
+// bug) meant clicking it flipped you to mobile, which read as exactly
+// backwards: a button that says PC should be the one that gets you to PC.
+function renderDeviceToggleButton(extraClass, showLabel) {
+  const goingToMobile = !isMobileLayout();
+  const label = goingToMobile ? '모바일' : 'PC';
+  return `<button class="${extraClass}" data-action="toggle-device" aria-label="${label}로 전환">${icon(
+    goingToMobile ? 'smartphone' : 'monitor',
+    16
+  )}${showLabel ? ' ' + label : ''}</button>`;
+}
+
 function renderMobileTopBar() {
   return `
   <div class="mobile-topbar">
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 20)}</button>
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
     <span class="mobile-topbar-title">단어장</span>
     ${renderSearchBar()}
+    ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
   </div>`;
 }
 
@@ -640,7 +746,83 @@ function renderSearchBar() {
   )}" aria-label="단어 검색" title="${regexError ? escapeHtml('잘못된 정규식: ' + regexError) : ''}" />
     <button class="search-advanced-btn ${
       isSearchAdvancedActive() ? 'active' : ''
-    }" data-action="open-advanced-search" aria-label="고급 검색">${icon('sliders-horizontal', 15)}</button>
+    }" data-action="open-advanced-search" aria-label="고급 검색">${icon('list-filter', 15)}</button>
+  </div>`;
+}
+
+// Full-screen takeover while ui.session is active — see render()'s early
+// return. Rendered instead of (never alongside) the toolbar/feed/progress
+// panel.
+function renderSessionView() {
+  const s = ui.session;
+
+  // Skip past any queued id that no longer exists (e.g. deleted mid-session)
+  // by advancing the plain state in place — not via advanceSession(), which
+  // calls render() itself and would race with the render() call already in
+  // progress for this pass.
+  while (!s.finished && !words.some((w) => w.id === s.queue[s.i])) {
+    s.i++;
+    s.revealed = false;
+    if (s.i >= s.queue.length) s.finished = true;
+  }
+
+  if (s.finished) {
+    const stats = computeStats();
+    return `
+    <div class="session-screen session-complete">
+      <div class="session-complete-line">암기함 ${s.known} · 다시 보기 ${s.again} — 진행률 ${stats.memoRate}%</div>
+      <div class="session-complete-actions">
+        <button class="btn btn-primary" data-action="session-restart">남은 단어로 다시</button>
+        <button class="btn" data-action="end-session">단어장으로</button>
+      </div>
+    </div>`;
+  }
+
+  const id = s.queue[s.i];
+  const word = words.find((w) => w.id === id);
+  const p = progress[id] || defaultProgressFor(word);
+
+  const stripHtml = s.queue
+    .map((_, i) => `<div class="session-strip-cell ${i < s.i ? 'done' : ''}"></div>`)
+    .join('');
+
+  const bodyHtml = s.revealed
+    ? `<div class="session-meanings">${word.meanings
+        .map(
+          (m, i) => `
+        <div class="session-meaning">
+          ${m.meaning ? `<div class="meaning">${i + 1}. ${escapeHtml(m.meaning)}</div>` : ''}
+          ${m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
+        </div>`
+        )
+        .join('')}</div>`
+    : `<button class="session-reveal-btn" data-action="session-reveal">뜻 보기 (Space)</button>`;
+
+  return `
+  <div class="session-screen">
+    <div class="session-header">
+      <span class="session-title">복습 세션</span>
+      <span class="session-count">${s.i + 1} / ${s.queue.length}</span>
+      <div class="session-strip">${stripHtml}</div>
+      <button class="session-close-btn" data-action="end-session">${icon('x', 15)} 세션 종료</button>
+    </div>
+    <div class="session-body">
+      <div class="session-word-row">
+        <span class="session-word">${escapeHtml(word.word)}</span>
+        <span class="session-category">${escapeHtml(word.category)}</span>
+      </div>
+      ${bodyHtml}
+    </div>
+    <div class="session-footer">
+      <div class="session-actions">
+        <button class="btn btn-primary" data-action="session-know">${icon('check', 15)} 암기함</button>
+        <button class="btn" data-action="session-again">${icon('rotate-ccw', 15)} 다시 보기</button>
+        <button class="btn ${p.important ? 'session-important-active' : ''}" data-action="session-toggle-important" data-id="${escapeHtml(
+    id
+  )}">${icon('bookmark', 15)} 중요</button>
+      </div>
+      <div class="session-key-hints">Space 뜻 · Enter 암기함 · → 다시 보기</div>
+    </div>
   </div>`;
 }
 
@@ -666,49 +848,60 @@ function renderProgressBody(stats) {
     (_, i) => `<div class="bar-cell ${i < stats.importantBarFilled ? 'filled' : ''}"></div>`
   ).join('');
 
-  const filterRow = (label, key) => `
-    <div class="stat-row clickable ${ui.filterMode === key && !ui.activeCategory ? 'active' : ''}" data-action="stat-filter" data-filter="${key}">
-      <span>${label}</span>
-      <span>${stats[key]}개</span>
-    </div>`;
-
   const perCategoryHtml = stats.byCategory
     .map((c) => {
-      // '' (전체) normalizes to "no filter within this category" — see the
-      // stat-category-filter click handler, which does the same when
-      // reading data-filter back off the button.
       const chip = (label, key, count) => {
-        const isActive = ui.activeCategory === c.category && (key ? ui.filterMode === key : !ui.filterMode);
+        const isActive = ui.activeCategory === c.category && ui.filterMode === key;
         return `<button class="cat-chip ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
           c.category
         )}" data-filter="${key}">${label} ${count}개</button>`;
       };
       const collapsed = ui.collapsedCategories.has(c.category);
+      // Clicking the category name itself does what the old "전체" chip
+      // did (see the "tab" action) — that's why there's no 전체 chip below.
+      const nameActive = ui.activeCategory === c.category && !ui.filterMode;
       return `
       <div class="cat-stat">
         <div class="cat-stat-header">
           <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
         c.category
       )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
-          <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
+          <span class="cat-stat-name ${nameActive ? 'active' : ''}" data-action="tab" data-category="${escapeHtml(
         c.category
-      )}</span>
+      )}">${escapeHtml(c.category)}</span>
+          <span class="cat-stat-bar"><span class="cat-stat-bar-fill" style="width:${c.rate}%"></span></span>
           <span class="cat-stat-rate">${c.rate}%</span>
         </div>
         ${
           collapsed
             ? ''
-            : `<div class="cat-chip-group">${chip('전체', '', c.total)}${chip(
-                '미암기',
-                'unmemorized',
-                c.unmemorized
-              )}${chip('중요', 'important', c.important)}</div>`
+            : `<div class="cat-chip-group">${chip('미암기', 'unmemorized', c.unmemorized)}${chip(
+                '중요',
+                'important',
+                c.important
+              )}</div>`
         }
       </div>`;
     })
     .join('');
 
-  const allActive = !ui.filterMode && !ui.activeCategory;
+  // height = 6 + (n/peak)*42 — peak floors at 1 so an all-zero week still
+  // draws every bar at the 6px "empty" floor instead of dividing by zero.
+  const forecastPeak = Math.max(1, ...stats.forecast);
+  const forecastLabels = ['오늘', '+1', '+2', '+3', '+4', '+5', '+6'];
+  const forecastHtml = stats.forecast
+    .map((n, i) => {
+      const height = Math.round(6 + (n / forecastPeak) * 42);
+      return `
+      <div class="forecast-bar-col">
+        ${n > 0 ? `<span class="forecast-bar-value">${n}</span>` : ''}
+        <div class="forecast-bar ${n === 0 ? 'empty' : ''}" style="height:${height}px" aria-label="${
+        forecastLabels[i]
+      } 복습 예정 ${n}개"></div>
+        <span class="forecast-bar-label">${forecastLabels[i]}</span>
+      </div>`;
+    })
+    .join('');
 
   return `
     <div class="progress-numbers">
@@ -726,22 +919,26 @@ function renderProgressBody(stats) {
       <span class="legend-item"><span class="legend-swatch legend-important"></span>중요 ${stats.important}</span>
       <span class="legend-item"><span class="legend-swatch legend-unmemo"></span>미암기 ${stats.unmemorized}</span>
     </div>
-    <div class="stat-row clickable ${allActive ? 'active' : ''}" data-action="tab" data-category="">
-      <span>전체 보기</span>
+    <div class="forecast-section">
+      <div class="forecast-title">복습 예정 · 7일</div>
+      <div class="forecast-bars">${forecastHtml}</div>
     </div>
-    ${filterRow('미암기', 'unmemorized')}
-    ${filterRow('중요', 'important')}
     <div class="cat-stats">${perCategoryHtml}</div>`;
 }
 
 function renderMobileProgressView() {
   const stats = computeStats();
+  const dueTodayCount = countDueToday();
 
   return `
     <div class="drawer-header">
       진행률
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
     </div>
+    <button class="drawer-settings-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
+    'graduation-cap',
+    17
+  )} 오늘 복습 ${dueTodayCount}</button>
     ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
@@ -761,9 +958,9 @@ function renderMobileSettingsView() {
 
   return `
     <div class="drawer-header">
-      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 18)}</button>
+      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 17)}</button>
       설정
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
     </div>
     <div class="settings-section">
       <div class="settings-section-title">데이터</div>
@@ -774,7 +971,8 @@ function renderMobileSettingsView() {
       <div class="settings-section-title">화면</div>
       <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
-  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
+  }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
+      ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
       ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
     </div>
     <div class="settings-section">
@@ -787,22 +985,48 @@ function renderMobileSettingsView() {
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
     </div>
     <div class="settings-section">
+      <div class="settings-section-title">보기</div>
+      <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
+    settings.examples ? '표시' : '숨김'
+  }</button>
+      <div class="chip-group">
+        ${['all', 'unmemorized', 'important']
+          .map((key) => {
+            const labels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
+            const current = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
+            return `<button class="chip-btn ${key === current ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
+              labels[key]
+            }</button>`;
+          })
+          .join('')}
+      </div>
+      <button class="btn" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
+    </div>
+    <div class="settings-section">
       <div class="settings-section-title">단어 편집</div>
       <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
     </div>
   `;
 }
 
+const MODE_LABELS = { memorize: '암기', 'meaning-test': '의미', 'word-test': '단어' };
+
+function renderModeSegment() {
+  return `
+    <div class="mode-segment">
+      ${Object.keys(MODE_LABELS)
+        .map(
+          (m) =>
+            `<button class="mode-segment-btn ${m === settings.mode ? 'active' : ''}" data-action="select-mode-btn" data-mode="${m}">${
+              MODE_LABELS[m]
+            }</button>`
+        )
+        .join('')}
+    </div>`;
+}
+
 function renderToolbar() {
-  const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
-  const modeOptionsHtml = Object.keys(modeLabels)
-    .map(
-      (m) =>
-        `<option value="${m}" ${m === settings.mode ? 'selected' : ''}>${escapeHtml(
-          modeLabels[m]
-        )}</option>`
-    )
-    .join('');
+  const dueTodayCount = countDueToday();
 
   if (settings.toolbarCollapsed) {
     return `
@@ -817,33 +1041,87 @@ function renderToolbar() {
   return `
   <div class="toolbar">
     <div class="toolbar-row">
-      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
-      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
-      <button class="btn" data-action="open-help">${icon('circle-help', 15)} 사용법</button>
-      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+      <div class="toolbar-brand">
+        <span class="brand-name">단어장</span>
+        <span class="brand-count">${words.length} WORDS</span>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+        <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
+        <button class="btn" data-action="open-help">${icon('circle-help', 15)} 사용법</button>
+      </div>
+      <div class="toolbar-group">
+        ${renderModeSegment()}
+        <button class="chip-btn icon-toggle-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
+    'graduation-cap',
+    16
+  )} 오늘 복습 ${dueTodayCount}</button>
+        <button class="chip-btn icon-toggle-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">${icon(
+    'shuffle',
+    16
+  )} 무작위</button>
+      </div>
+      <div class="toolbar-group">
+        ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc', 'layout-grid')}
+        ${stepperControl('개수', settings.count, 'count-dec', 'count-inc', 'list')}
+        <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
-  }">${icon(settings.darkMode ? 'moon' : 'sun', 16)}</button>
-      ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-      <label class="opt">
-        모드
-        <select data-action="select-mode">${modeOptionsHtml}</select>
-      </label>
-      <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
-      ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
-      ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-      <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
-      <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
-        'chevron-up',
-        15
-      )} 접기</button>
+  }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
+        <button class="chip-btn icon-toggle-btn ${ui.viewDrawerOpen ? 'active' : ''}" data-action="toggle-view-drawer" aria-label="보기 설정">${icon(
+    'sliders-horizontal',
+    16
+  )}</button>
+      </div>
+      <div class="toolbar-group toolbar-group-right">
+        ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
+        <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">${icon(
+    'pencil',
+    15
+  )} 편집 모드</button>
+        <button class="panel-toggle" data-action="toggle-toolbar-collapse" aria-label="설정 접기">${icon(
+          'chevron-up',
+          15
+        )} 접기</button>
+      </div>
     </div>
+    ${ui.viewDrawerOpen ? renderViewDrawer() : ''}
   </div>`;
 }
 
-function stepperControl(label, value, decAction, incAction) {
+function renderViewDrawer() {
+  const filterLabels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
+  const currentFilterKey = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
   return `
-      <label class="opt">
-        ${label}
+  <div class="view-drawer">
+    ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+    <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
+    settings.examples ? '표시' : '숨김'
+  }</button>
+    <div class="opt">
+      필터
+      <div class="chip-group">
+        ${Object.keys(filterLabels)
+          .map(
+            (key) =>
+              `<button class="chip-btn ${key === currentFilterKey ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
+                filterLabels[key]
+              }</button>`
+          )
+          .join('')}
+      </div>
+    </div>
+    <button class="btn view-drawer-reset" data-action="reset-progress">${icon('rotate-ccw', 15)} 진행률 초기화</button>
+  </div>`;
+}
+
+// iconName replaces the visible text label with an icon (label still lands
+// on the wrapper as a title/aria-label) — used for 열/개수 in the toolbar,
+// which show as icon+stepper rather than a Korean label there.
+function stepperControl(label, value, decAction, incAction, iconName) {
+  const labelHtml = iconName ? icon(iconName, 15) : label;
+  return `
+      <label class="opt" ${iconName ? `title="${label}" aria-label="${label}"` : ''}>
+        ${labelHtml}
         <span class="stepper">
           <button data-action="${decAction}" aria-label="${label} 줄이기">−</button>
           <span class="stepper-value">${value}</span>
@@ -855,8 +1133,11 @@ function stepperControl(label, value, decAction, incAction) {
 function renderFeedPanel(filtered, windowWords) {
   const currentCategoryLabel = isSearchActive() ? '검색 결과' : ui.activeCategory || '전체';
 
+  // "1–6 / 15" — the range of the page currently on screen out of the whole
+  // filtered set, not a single cursor position.
+  const rangeEnd = Math.min(ui.startIndex + settings.count, filtered.length);
   const positionText = filtered.length
-    ? `${filtered.length}개 중 ${ui.startIndex + 1}번째`
+    ? `${ui.startIndex + 1}–${rangeEnd} / ${filtered.length}`
     : words.length
     ? '표시할 단어가 없습니다'
     : 'CSV 파일을 불러오세요';
@@ -878,12 +1159,21 @@ function renderFeedPanel(filtered, windowWords) {
   // windowWords either way, so they apply to the table exactly like they do
   // to the feed.
   const feedBodyHtml = ui.editMode
-    ? `<div class="edit-table">${cardsHtml || emptyStateHtml}</div>
+    ? `<div class="edit-table">
+         <div class="edit-table-header">
+           <span>분류</span>
+           <span>표제어</span>
+           <span>뜻</span>
+         </div>
+         ${cardsHtml || emptyStateHtml}
+       </div>
        <button class="edit-add-word-btn" data-action="edit-add-word">${icon('plus', 16)} 단어 추가</button>`
-    : `<div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${currentCardWidth}px);">${
+    : `<div class="cards" style="grid-template-columns: repeat(${settings.cols}, minmax(0, 1fr));">${
         cardsHtml || emptyStateHtml
       }</div>`;
 
+  // Non-edit: the range label sits right beside the title. Edit: the count
+  // of what's being edited plus the undo/bulk-delete controls take its place.
   const headerRightHtml = ui.editMode
     ? `<span class="current-category-label">${windowWords.length} / ${filtered.length}개 편집 중</span>
        <button class="btn" data-action="undo-edit" ${ui.editHistory.length ? '' : 'disabled'}>${icon(
@@ -893,22 +1183,22 @@ function renderFeedPanel(filtered, windowWords) {
        <button class="edit-trash-btn ${
          ui.editSelectedIds.size ? 'has-selection' : ''
        }" data-action="edit-bulk-delete" aria-label="선택한 단어 삭제">${icon('trash-2', 16)}</button>`
-    : `<span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>`;
+    : `<span class="position-indicator">${positionText}</span>`;
 
   return `
   <section class="feed-panel">
     <div class="feed-header-row">
-      <div class="feed-header">단어장 피드</div>
+      <div class="feed-header">${escapeHtml(currentCategoryLabel)}</div>
       ${headerRightHtml}
       ${renderSearchBar()}
     </div>
-    <div class="position-indicator">${positionText}</div>
     <div class="feed-nav-row">
       ${renderJumpBox(filtered.length)}
       ${paginationBar}
     </div>
     ${feedBodyHtml}
-    <div class="feed-nav-row">
+    <div class="feed-footer">
+      <span class="feed-key-hints">Space 암기 · Enter 중요 · ←→ 이동</span>
       ${paginationBar}
     </div>
   </section>`;
@@ -931,6 +1221,8 @@ function renderJumpBox(filteredLen) {
 // (the same two breakpoints the mobile CSS uses), so it can't go stale
 // between renders the way a plain max-width check would.
 function isMobileLayout() {
+  if (settings.device === 'mobile') return true;
+  if (settings.device === 'pc') return false;
   return window.matchMedia(
     '(orientation: portrait) and (max-width: 560px), (orientation: landscape) and (max-height: 560px)'
   ).matches;
@@ -1001,18 +1293,25 @@ function renderCard(word, index, focused) {
 
   const dictUrl = 'https://dict.naver.com/dict.search?query=' + encodeURIComponent(word.word);
   const importantClass = p.important ? ' important' : '';
-  const bookmarkHtml = `<span class="card-bookmark${
+  // Bookmark + dict-search live together at the card's top-right; the
+  // left slot is a plain spacer so the headword still sits visually
+  // centered between two equal-width grid columns.
+  const bookmarkHtml = `<button type="button" class="card-bookmark${
     p.important ? ' active' : ''
-  }" aria-hidden="true">${icon('bookmark', 15)}</span>`;
+  }" data-action="toggle-important-click" data-id="${escapeHtml(word.id)}" aria-label="중요 표시 전환">${icon(
+    'bookmark',
+    15
+  )}</button>`;
+  const cardIconsHtml = `<span class="card-word-icons">${bookmarkHtml}<a class="dict-link" href="${escapeHtml(
+    dictUrl
+  )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${icon(
+    'search',
+    14
+  )}</a></span>`;
   const wordHtml = wordVisible
-    ? `<div class="card-word${importantClass}">${bookmarkHtml}<span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
         word.word
-      )}</span><a class="dict-link" href="${escapeHtml(
-        dictUrl
-      )}" target="_blank" rel="noopener noreferrer" title="네이버 사전에서 검색" aria-label="네이버 사전에서 검색">${icon(
-        'search',
-        14
-      )}</a></div>`
+      )}</span>${cardIconsHtml}</div>`
     : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
 
   let meaningsHtml;
@@ -1022,13 +1321,15 @@ function renderCard(word, index, focused) {
           .map((m, i) => {
             const checked = Boolean(p.checked[i]);
             return `
-            <div class="meaning-item ${checked ? 'checked' : ''}">
+            <div class="meaning-item ${checked ? 'checked' : ''}" data-action="toggle-checked" data-id="${escapeHtml(
+              word.id
+            )}" data-index="${i}">
               <button class="check-btn ${checked ? 'checked' : ''}" data-action="toggle-checked" data-id="${escapeHtml(
                 word.id
               )}" data-index="${i}" aria-label="${i + 1}번 뜻 암기 확인">${i + 1}</button>
               <div class="meaning-text">
                 ${m.meaning ? `<div class="meaning">${escapeHtml(m.meaning)}</div>` : ''}
-                ${m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
+                ${settings.examples && m.example ? `<div class="example">${escapeHtml(m.example)}</div>` : ''}
               </div>
             </div>`;
           })
@@ -1044,6 +1345,13 @@ function renderCard(word, index, focused) {
   )}" data-index="${index}">
     ${wordHtml}
     <div class="card-meanings">${meaningsHtml}</div>
+    <div class="card-footer">
+      <span class="card-category">${escapeHtml(word.category)}</span>
+      <span class="card-stage-dots" aria-label="복습 단계 ${p.stage}/6">${Array.from(
+    { length: 6 },
+    (_, i) => `<span class="card-stage-dot ${i < p.stage ? 'filled' : ''}"></span>`
+  ).join('')}</span>
+    </div>
   </div>`;
 }
 
@@ -1156,7 +1464,7 @@ function renderExportPanel() {
     <div class="modal">
       <div class="modal-header">
         내보내기
-        <button class="modal-close" data-action="close-export">${icon('x', 18)}</button>
+        <button class="modal-close" data-action="close-export">${icon('x', 17)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">진행 상황</div>
@@ -1208,7 +1516,7 @@ function renderAdvancedSearchPanel() {
     <div class="modal">
       <div class="modal-header">
         고급 검색
-        <button class="modal-close" data-action="close-advanced-search">${icon('x', 18)}</button>
+        <button class="modal-close" data-action="close-advanced-search">${icon('x', 17)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">검색 방식</div>
@@ -1247,7 +1555,7 @@ function renderHelpPanel() {
     <div class="modal">
       <div class="modal-header">
         사용법
-        <button class="modal-close" data-action="close-help">${icon('x', 18)}</button>
+        <button class="modal-close" data-action="close-help">${icon('x', 17)}</button>
       </div>
       <div class="modal-section">
         <div class="modal-section-title">PC 단축키</div>
@@ -1374,26 +1682,46 @@ document.getElementById('app').addEventListener('click', (e) => {
     ui.focusedIndex = newFocus;
   }
 
-  // exact-target checks (must not fire when clicking descendants)
-  if (e.target.dataset && e.target.dataset.action === 'close-export') {
+  // Two ways to trigger each of these: an exact click on the backdrop
+  // itself (dimmed area around the modal — never has other content
+  // covering that exact point, so an exact e.target check is enough), or
+  // anywhere inside the .modal-close button — which now wraps a Lucide
+  // icon <svg>, so e.target when actually clicking it is the icon, not the
+  // button; closest('.modal-close...') is needed to still catch that
+  // rather than only matching a direct click on the button element itself.
+  // .modal-close is never reused on the backdrop, so this can't accidentally
+  // match a click elsewhere inside the modal's content.
+  if (
+    (e.target.dataset && e.target.dataset.action === 'close-export') ||
+    e.target.closest('.modal-close[data-action="close-export"]')
+  ) {
     ui.exportOpen = false;
     render();
     return;
   }
 
-  if (e.target.dataset && e.target.dataset.action === 'close-mobile-drawer') {
+  if (
+    (e.target.dataset && e.target.dataset.action === 'close-mobile-drawer') ||
+    e.target.closest('.drawer-close-btn[data-action="close-mobile-drawer"]')
+  ) {
     ui.mobileDrawerOpen = false;
     render();
     return;
   }
 
-  if (e.target.dataset && e.target.dataset.action === 'close-advanced-search') {
+  if (
+    (e.target.dataset && e.target.dataset.action === 'close-advanced-search') ||
+    e.target.closest('.modal-close[data-action="close-advanced-search"]')
+  ) {
     ui.search.advancedOpen = false;
     render();
     return;
   }
 
-  if (e.target.dataset && e.target.dataset.action === 'close-help') {
+  if (
+    (e.target.dataset && e.target.dataset.action === 'close-help') ||
+    e.target.closest('.modal-close[data-action="close-help"]')
+  ) {
     ui.helpOpen = false;
     render();
     return;
@@ -1564,6 +1892,48 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  const startSessionBtn = e.target.closest('[data-action="start-session"]');
+  if (startSessionBtn) {
+    startSession();
+    return;
+  }
+
+  const endSessionBtn = e.target.closest('[data-action="end-session"]');
+  if (endSessionBtn) {
+    endSession();
+    return;
+  }
+
+  const sessionRestartBtn = e.target.closest('[data-action="session-restart"]');
+  if (sessionRestartBtn) {
+    startSession();
+    return;
+  }
+
+  const sessionRevealBtn = e.target.closest('[data-action="session-reveal"]');
+  if (sessionRevealBtn) {
+    sessionReveal();
+    return;
+  }
+
+  const sessionKnowBtn = e.target.closest('[data-action="session-know"]');
+  if (sessionKnowBtn) {
+    sessionKnow();
+    return;
+  }
+
+  const sessionAgainBtn = e.target.closest('[data-action="session-again"]');
+  if (sessionAgainBtn) {
+    sessionAgain();
+    return;
+  }
+
+  const sessionImportantBtn = e.target.closest('[data-action="session-toggle-important"]');
+  if (sessionImportantBtn) {
+    toggleImportant(sessionImportantBtn.getAttribute('data-id'));
+    return;
+  }
+
   const editAddMeaningBtn = e.target.closest('[data-action="edit-add-meaning"]');
   if (editAddMeaningBtn) {
     const id = editAddMeaningBtn.getAttribute('data-id');
@@ -1669,18 +2039,6 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const statFilter = e.target.closest('[data-action="stat-filter"]');
-  if (statFilter) {
-    const filter = statFilter.getAttribute('data-filter');
-    const alreadyActive = ui.filterMode === filter && !ui.activeCategory;
-    ui.filterMode = alreadyActive ? null : filter;
-    ui.activeCategory = null;
-    deactivateShuffle();
-    resetPaging();
-    render();
-    return;
-  }
-
   const statCategoryFilter = e.target.closest('[data-action="stat-category-filter"]');
   if (statCategoryFilter) {
     const cat = statCategoryFilter.getAttribute('data-category');
@@ -1735,16 +2093,18 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  const bookmarkBtn = e.target.closest('[data-action="toggle-important-click"]');
+  if (bookmarkBtn) {
+    toggleImportant(bookmarkBtn.getAttribute('data-id'));
+    return;
+  }
+
   const checkBtn = e.target.closest('[data-action="toggle-checked"]');
   if (checkBtn) {
     const id = checkBtn.getAttribute('data-id');
     const index = Number(checkBtn.getAttribute('data-index'));
     const p = progress[id];
-    if (p) {
-      p.checked[index] = !p.checked[index];
-      saveProgress(progress);
-      render();
-    }
+    if (p && Array.isArray(p.checked)) setMeaningChecked(id, index, !p.checked[index]);
     return;
   }
 
@@ -1753,6 +2113,60 @@ document.getElementById('app').addEventListener('click', (e) => {
     settings.darkMode = !settings.darkMode;
     saveSettings(settings);
     render();
+    return;
+  }
+
+  const modeSegBtn = e.target.closest('[data-action="select-mode-btn"]');
+  if (modeSegBtn) {
+    settings.mode = modeSegBtn.getAttribute('data-mode');
+    saveSettings(settings);
+    ui.revealedIds.clear();
+    render();
+    return;
+  }
+
+  const viewDrawerToggleBtn = e.target.closest('[data-action="toggle-view-drawer"]');
+  if (viewDrawerToggleBtn) {
+    ui.viewDrawerOpen = !ui.viewDrawerOpen;
+    render();
+    return;
+  }
+
+  const deviceToggleBtn = e.target.closest('[data-action="toggle-device"]');
+  if (deviceToggleBtn) {
+    // Force the opposite of whatever's currently in effect (real viewport,
+    // if this hadn't been touched yet) — from here it just alternates
+    // between the two forced states.
+    settings.device = isMobileLayout() ? 'pc' : 'mobile';
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const examplesToggleBtn = e.target.closest('[data-action="toggle-examples"]');
+  if (examplesToggleBtn) {
+    settings.examples = !settings.examples;
+    saveSettings(settings);
+    render();
+    return;
+  }
+
+  const viewDrawerFilterBtn = e.target.closest('[data-action="view-drawer-filter"]');
+  if (viewDrawerFilterBtn) {
+    const key = viewDrawerFilterBtn.getAttribute('data-filter');
+    ui.filterMode = key === 'all' ? null : key;
+    ui.activeCategory = null;
+    deactivateShuffle();
+    resetPaging();
+    render();
+    return;
+  }
+
+  const resetProgressBtn = e.target.closest('[data-action="reset-progress"]');
+  if (resetProgressBtn) {
+    if (confirm('모든 단어의 진행률(암기·중요·복습 일정)을 초기화하시겠습니까?')) {
+      resetAllProgress();
+    }
     return;
   }
 
@@ -2247,6 +2661,25 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (typing) return;
+
+  if (ui.session) {
+    if (ui.session.finished) return; // completion screen only has its own buttons
+    if (e.code === 'Space') {
+      e.preventDefault();
+      sessionReveal();
+      return;
+    }
+    if (e.key === 'Enter') {
+      sessionKnow();
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      sessionAgain();
+      return;
+    }
+    return;
+  }
+
   if (ui.editMode) return; // card focus/Space/Enter don't apply while editing
 
   const filtered = getDisplayWords();

@@ -83,27 +83,59 @@ function isTruthyFlag(v) {
   return ['1', 'true', 'yes', 'y', 'o', '참'].includes((v || '').trim().toLowerCase());
 }
 
-// Columns are positional — always category,word,meaning,example in that
-// order, regardless of what the header row's cells actually say. The first
-// row is always treated as a header and skipped. Rows sharing the same
-// category+word are grouped into one word entry with multiple
-// {meaning, example} pairs. Any text content (Korean/Hanja/Hiragana/Latin/
-// digits/symbols) is accepted as-is; only a blank word is rejected.
+// A header row is optional. Columns are positional either way — always
+// category,word,meaning,example in that order, regardless of what a header
+// row's cells actually say; the header is only ever detected so it can be
+// skipped, never to map columns by name. A file whose very first line is
+// already a real word would otherwise lose that word silently.
+const HEADER_CELL_WORDS = [
+  'category',
+  'word',
+  'meaning',
+  'example',
+  'memorized',
+  'important',
+  'checked',
+  '분류',
+  '표제어',
+  '단어',
+  '뜻',
+  '의미',
+  '예문',
+  '예시',
+  '암기',
+  '중요',
+  '체크',
+];
+
+// Treated as a header only when the first two cells BOTH read as column
+// names — one alone is too easy to hit by accident (a word could legitimately
+// be "단어", and a category could legitimately be "분류").
+function looksLikeHeaderRow(cols) {
+  if (!cols || cols.length < 2) return false;
+  const cell = (i) => (cols[i] || '').trim().toLowerCase();
+  return HEADER_CELL_WORDS.includes(cell(0)) && HEADER_CELL_WORDS.includes(cell(1));
+}
+
+// Rows sharing the same category+word are grouped into one word entry with
+// multiple {meaning, example} pairs. Any text content (Korean/Hanja/
+// Hiragana/Latin/digits/symbols) is accepted as-is; only a blank word is
+// rejected.
 //
 // Optional progress-sync columns 5-7 (memorized,important,checked) let a
 // CSV exported from another device carry study progress along with the
-// word list. Their presence is detected from the header row's column count
-// so plain word-list CSVs (no such columns) are unaffected — imported words
-// then get importedProgress=null and fall back to local defaults.
+// word list. Their presence is detected from the widest row rather than
+// from row 0, since row 0 may now be data rather than a header.
 function rowsToWords(rows) {
   if (rows.length === 0) return [];
 
-  const hasProgressCols = rows[0].length > 4;
+  const startRow = looksLikeHeaderRow(rows[0]) ? 1 : 0;
+  const hasProgressCols = rows.some((r) => r.length > 4);
   const words = [];
   const byKey = new Map();
   const keyCount = new Map();
 
-  for (let r = 1; r < rows.length; r++) {
+  for (let r = startRow; r < rows.length; r++) {
     const cols = rows[r];
     const category = (cols[0] || '').trim() || '미분류';
     const word = (cols[1] || '').trim();

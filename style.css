@@ -85,11 +85,13 @@ svg.lucide {
   vertical-align: middle;
 }
 
+/* README's PC reference frame is 1180–1400 wide; the page centers inside
+   that and the grids below divide whatever width results. */
 #app {
-  width: fit-content;
-  max-width: calc(100vw - 24px);
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 30px 34px 44px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -97,19 +99,94 @@ svg.lucide {
 
 /* ---------- toolbar ---------- */
 
+/* The system bar is a rule under the row, not a boxed panel — that single
+   bottom line is what separates it from the page below it. */
 .toolbar {
   position: relative;
   background: var(--paper);
-  border: 1px solid var(--rule);
+  border: none;
+  border-bottom: 1px solid var(--rule);
   border-radius: 0;
-  padding: 12px 16px 16px;
+  padding: 0 0 11px;
 }
 
 .toolbar-row {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  white-space: nowrap;
+}
+
+.toolbar-group {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
+  padding: 0 20px;
+  border-left: 1px solid var(--rule-soft);
+}
+
+.toolbar-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-right: 18px;
+}
+
+.brand-name {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.brand-count {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.toolbar-group-right {
+  margin-left: auto;
+}
+
+.mode-segment {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+}
+
+.mode-segment-btn {
+  border: none;
+  background: var(--paper);
+  color: var(--muted);
+  padding: 4px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-segment-btn + .mode-segment-btn {
+  border-left: 1px solid var(--rule);
+}
+
+.mode-segment-btn.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.view-drawer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule-soft);
+  animation: riseIn 0.15s ease-out;
+}
+
+.view-drawer-reset {
+  margin-left: auto;
 }
 
 .btn {
@@ -192,6 +269,7 @@ svg.lucide {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 6px 10px;
 }
 
@@ -205,24 +283,28 @@ svg.lucide {
   max-width: 100%;
 }
 
+/* Also a column of the page rather than a boxed panel — same reasoning as
+   .toolbar / .progress-panel; the card grid draws its own rules. */
 .feed-panel {
   min-width: 0;
   background: var(--paper);
-  border: 1px solid var(--rule);
+  border: none;
   border-radius: 0;
-  padding: 16px;
+  padding: 0;
 }
 
 .feed-header-row {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
 .feed-header {
-  font-weight: 700;
-  font-size: 1.15em;
+  font-weight: 600;
+  font-size: 21px;
 }
 
 .current-category-label {
@@ -255,7 +337,9 @@ svg.lucide {
 }
 
 .search-input {
-  flex: 0 1 180px;
+  /* no shrink — the spec width is exact, and .feed-header-row wraps instead
+     of squeezing it when the row runs out of room */
+  flex: 0 0 210px;
   min-width: 80px;
   border: none;
   border-bottom: 1px solid var(--rule-strong);
@@ -291,13 +375,31 @@ svg.lucide {
 }
 
 .position-indicator {
-  font-size: 0.85em;
+  font-size: 13px;
   font-family: var(--font-heading);
   color: var(--muted);
-  margin-bottom: 12px;
 }
 
 /* ---------- feed / cards ---------- */
+
+/* Footer: keyboard hints on the left, pagination centered — the hints sit
+   in the left 1fr track so the pagination stays optically centered in the
+   panel rather than being pushed off-center by them. */
+.feed-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.feed-key-hints {
+  grid-column: 1;
+  justify-self: start;
+  font-size: 0.8em;
+  color: var(--muted);
+  white-space: nowrap;
+}
 
 .feed-nav-row {
   display: grid;
@@ -466,6 +568,17 @@ svg.lucide {
 .edit-table {
   display: flex;
   flex-direction: column;
+}
+
+.edit-table-header {
+  display: grid;
+  grid-template-columns: 120px 190px minmax(0, 1fr);
+  gap: 14px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.82em;
+  font-weight: 600;
 }
 
 .edit-row {
@@ -696,18 +809,8 @@ svg.lucide {
   box-shadow: inset 0 -12px 0 var(--important-underline);
 }
 
-.card-bookmark {
+.card-word-spacer {
   grid-column: 1;
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  color: var(--muted);
-  opacity: 0.25;
-}
-
-.card-bookmark.active {
-  opacity: 1;
-  color: var(--ink);
 }
 
 .card-word-text {
@@ -726,9 +829,40 @@ svg.lucide {
   font-size: 1em;
 }
 
-.dict-link {
+.card-word-icons {
   grid-column: 3;
-  justify-self: start;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-bookmark {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  margin: 0;
+  color: var(--muted);
+  opacity: 0.25;
+  cursor: pointer;
+}
+
+.card-bookmark:hover {
+  opacity: 0.7;
+}
+
+.card-bookmark.active {
+  opacity: 1;
+  color: var(--ink);
+}
+
+.card-bookmark.active:hover {
+  opacity: 0.85;
+}
+
+.dict-link {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -745,10 +879,48 @@ svg.lucide {
 .card-meanings {
   flex: 1;
   overflow-y: auto;
+  /* Without this, setting only overflow-y here makes the browser silently
+     treat overflow-x as "auto" too (that's spec behavior, not a bug on its
+     own) — so anything even 1px wider than the card, like the meaning-item
+     negative-margin trick below, was popping a horizontal scrollbar. */
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
   touch-action: pan-y;
+}
+
+.card-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.card-category {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.card-stage-dots {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.card-stage-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--fill);
+}
+
+.card-stage-dot.filled {
+  background: var(--steel);
 }
 
 .meanings-placeholder,
@@ -763,6 +935,20 @@ svg.lucide {
   display: flex;
   gap: 4px;
   align-items: flex-start;
+  /* Widens the clickable/hover area without bleeding past the card's own
+     edge — an earlier version used a negative margin to push past it for
+     a bit more room, but that's exactly what was overflowing the card
+     horizontally. */
+  padding: 4px 6px;
+  cursor: pointer;
+  /* the whole row toggles checked now (not just the small number button),
+     so it shouldn't also read as selectable text — that just fights the
+     click with the browser's native text-selection */
+  user-select: none;
+}
+
+.meaning-item:hover {
+  background: color-mix(in srgb, #cf8a13 16%, transparent);
 }
 
 .check-btn {
@@ -816,13 +1002,16 @@ svg.lucide {
 
 /* ---------- progress panel ---------- */
 
+/* A column of the page separated by one rule, not a boxed panel — same
+   "지면" logic as the system bar above. */
 .progress-panel {
   background: var(--paper);
-  border: 1px solid var(--rule);
+  border: none;
+  border-left: 1px solid var(--rule);
   border-radius: 0;
-  padding: 16px;
+  padding: 0 0 0 24px;
   position: sticky;
-  top: 16px;
+  top: 30px;
   min-width: 0;
 }
 
@@ -865,8 +1054,12 @@ svg.lucide {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: 700;
-  font-size: 1.15em;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
   margin-bottom: 12px;
 }
 
@@ -877,7 +1070,10 @@ svg.lucide {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
+  /* the 62px number's tight line-height (0.85) lets its glyphs visually
+     spill past its line box — this needs to be generous or the bar right
+     below ends up overlapped */
+  margin-bottom: 22px;
 }
 
 .progress-percent {
@@ -988,6 +1184,57 @@ svg.lucide {
   background: var(--fill);
 }
 
+.forecast-section {
+  margin-bottom: 14px;
+}
+
+.forecast-title {
+  font-family: var(--font-heading);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.forecast-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 66px;
+}
+
+.forecast-bar-value {
+  font-family: var(--font-heading);
+  font-size: 0.75em;
+  font-weight: 600;
+  color: var(--steel-txt);
+}
+
+.forecast-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.forecast-bar {
+  width: 100%;
+  background: var(--steel);
+}
+
+.forecast-bar.empty {
+  background: var(--fill);
+}
+
+.forecast-bar-label {
+  font-family: var(--font-heading);
+  font-size: 0.68em;
+  color: var(--muted);
+}
+
 .stat-row {
   display: flex;
   justify-content: space-between;
@@ -1061,7 +1308,11 @@ svg.lucide {
 }
 
 .cat-stat-name {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1074,7 +1325,21 @@ svg.lucide {
   color: var(--steel-txt);
 }
 
+.cat-stat-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--fill);
+  min-width: 40px;
+}
+
+.cat-stat-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--steel);
+}
+
 .cat-stat-rate {
+  flex: 0 0 auto;
   color: var(--steel-txt);
   font-weight: 700;
   font-family: var(--font-heading);
@@ -1196,6 +1461,15 @@ svg.lucide {
   color: var(--paper);
 }
 
+/* "오늘 복습 N" specifically fills steel (not ink) when there's something
+   due — a distinct accent from the ink-filled toggles above */
+.chip-btn.due-active,
+.drawer-settings-btn.due-active {
+  background: var(--steel);
+  border-color: var(--steel);
+  color: #fff;
+}
+
 .modal-empty {
   color: var(--muted);
   font-size: 0.9em;
@@ -1260,6 +1534,169 @@ svg.lucide {
 .export-count-preview {
   font-size: 0.85em;
   color: var(--muted);
+}
+
+/* ---------- SRS review session ----------
+   Renders inside .main (see render()'s main-session branch) — the toolbar
+   above it stays visible, only the feed+progress area is replaced. */
+
+.main.main-session {
+  grid-template-columns: 1fr;
+}
+
+.session-screen {
+  border: 1px solid var(--rule);
+  padding: 26px 30px 30px;
+  animation: riseIn 0.18s ease-out;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.session-title {
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.session-count {
+  font-family: var(--font-heading);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.session-strip {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+
+.session-strip-cell {
+  flex: 1;
+  background: var(--fill);
+}
+
+.session-strip-cell.done {
+  background: var(--steel);
+}
+
+.session-close-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.session-close-btn:hover {
+  color: var(--ink);
+}
+
+.session-body {
+  padding: 10px 0 26px;
+}
+
+.session-word-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.session-word {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
+}
+
+.session-category {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.session-reveal-btn {
+  border: 1px dashed var(--rule);
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.session-reveal-btn:hover {
+  border-color: var(--steel);
+  color: var(--steel-txt);
+}
+
+.session-meanings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-meaning .meaning {
+  font-size: 18px;
+}
+
+.session-meaning .example {
+  font-size: 14px;
+}
+
+.session-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 20px;
+}
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-important-active {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.session-key-hints {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+.session-complete {
+  text-align: center;
+  padding: 50px 0;
+}
+
+.session-complete-line {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.session-complete-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 @media (max-width: 900px) {
@@ -1328,6 +1765,20 @@ svg.lucide {
   .mobile-topbar-title {
     font-weight: 700;
     flex: 0 0 auto;
+  }
+  /* Always-visible escape hatch back to PC — forcing mobile must never be a
+     one-way trap, so this sits in the topbar itself, not buried in a
+     settings sub-page. */
+  .mobile-device-toggle-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    padding: 5px 7px;
+    cursor: pointer;
   }
 
   /* the PC copy of the search bar (feed-header-row) would otherwise still
@@ -1492,6 +1943,78 @@ svg.lucide {
   .word-card {
     min-height: auto !important;
   }
+}
+
+/* ---------- manual PC/모바일 override (toolbar's "toggle-device" button) ----------
+   The responsive layout above is entirely media-query driven, which can't
+   react to a JS setting — so a forced choice needs its own rules, placed
+   after those media queries (both sides use !important, so source order is
+   the tiebreaker) covering the structural switches: toolbar/progress panel
+   vs. the mobile top bar + drawer, and the card grid's column count. Finer
+   mobile-only tweaks (the 14px base font size, card padding, etc.) are NOT
+   duplicated here — this covers layout structure, not every detail. */
+
+body.force-mobile .toolbar,
+body.force-mobile .progress-panel {
+  display: none !important;
+}
+
+body.force-mobile .mobile-topbar {
+  display: flex !important;
+}
+
+body.force-mobile #app {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+body.force-mobile .cards {
+  grid-template-columns: 1fr !important;
+}
+
+body.force-mobile .feed-header-row .search-bar {
+  display: none !important;
+}
+
+/* The drawer/backdrop's actual display/position/z-index only exist inside
+   the real @media block — forcing mobile at a real desktop width means
+   that query never matches, so without this the hamburger button's click
+   handler ran fine (state flipped, the node was in the DOM) but the drawer
+   stayed display:none the whole time. */
+body.force-mobile .mobile-drawer-backdrop {
+  display: block !important;
+  position: fixed !important;
+  inset: 0 !important;
+  background: color-mix(in srgb, var(--ink) 45%, transparent) !important;
+  z-index: 60 !important;
+}
+
+body.force-mobile .mobile-drawer {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: min(300px, 82vw) !important;
+  background: var(--paper) !important;
+  border-right: 1px solid var(--rule) !important;
+  box-shadow: var(--shadow-lg) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 14px !important;
+  overflow-y: auto !important;
+}
+
+body.force-pc .toolbar {
+  display: block !important;
+}
+
+body.force-pc .progress-panel {
+  display: block !important;
+}
+
+body.force-pc .mobile-topbar,
+body.force-pc .mobile-drawer-backdrop {
+  display: none !important;
 }
 
 @keyframes riseIn {
