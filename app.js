@@ -18,9 +18,8 @@ const ui = {
   shuffledIds: null, // word ids in shuffled order, snapshot of the filtered range at shuffle time
   preShuffleStartIndex: 0, // restored when shuffle is toggled back off
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
-  mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
   helpOpen: false,
-  viewDrawerOpen: false, // toolbar's sliders-horizontal toggle — font size/examples/filter/reset
+  settingsSheetOpen: false, // mobile-only: the sliders button's own bottom sheet
   editMode: false,
   editSelectedIds: new Set(), // word ids marked (via drag) for bulk delete while editing
   editHistory: [], // {words, progress} snapshots, most-recent last — reset each time edit mode is entered
@@ -669,6 +668,13 @@ function render() {
   document.body.classList.toggle('is-mobile', isMobileLayout());
 
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
+  // Headword tracks the body size but at a damped rate (0.6×), so it always
+  // stays clearly larger than the meanings instead of the two converging.
+  // Clamped so the extremes of the 12–22 range can't run away.
+  const headword = Math.round(
+    Math.min(32, Math.max(22, 26 + (settings.fontSize - DEFAULT_SETTINGS.fontSize) * 0.6))
+  );
+  document.documentElement.style.setProperty('--card-headword-size', headword + 'px');
 
   const app = document.getElementById('app');
 
@@ -691,16 +697,14 @@ function render() {
 
   app.innerHTML =
     renderMobileTopBar() +
-    renderMobileProgressStrips() +
     renderToolbar() +
-    // Outside the toolbar so it still appears on mobile, where the toolbar
-    // itself is hidden and the drawer is opened from the top bar instead.
-    (ui.viewDrawerOpen ? renderViewDrawer() : '') +
+    renderViewOptionsRow() +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
     (ui.session || ui.editMode ? '' : renderMobileBottomBar(filtered.length)) +
     renderMobileDrawer() +
+    renderSettingsSheet() +
     (ui.exportOpen ? renderExportPanel() : '') +
     (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
     (ui.helpOpen ? renderHelpPanel() : '');
@@ -761,24 +765,9 @@ function renderMobileTopBar() {
       ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
       <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
       <button class="mobile-view-btn ${
-        ui.viewDrawerOpen ? 'active' : ''
-      }" data-action="toggle-view-drawer" aria-label="보기 설정">${icon('sliders-horizontal', 17)}</button>
+        ui.settingsSheetOpen ? 'active' : ''
+      }" data-action="toggle-settings-sheet" aria-label="설정">${icon('sliders-horizontal', 17)}</button>
     </span>
-  </div>`;
-}
-
-// The same two 20-cell bars the progress panel shows, surfaced directly
-// under the mobile top bar (thinner: 14px / 6px).
-function renderMobileProgressStrips() {
-  const stats = computeStats();
-  const cells = (filled) =>
-    Array.from({ length: 20 }, (_, i) => `<div class="bar-cell ${i < filled ? 'filled' : ''}"></div>`).join('');
-  return `
-  <div class="mobile-strips">
-    <div class="bar-20 mobile-memo-strip" aria-label="암기율 ${stats.memoRate}%">${cells(stats.memoBarFilled)}</div>
-    <div class="bar-20 mobile-important-strip" aria-label="중요 표시 ${stats.importantRate}%">${cells(
-    stats.importantBarFilled
-  )}</div>
   </div>`;
 }
 
@@ -916,12 +905,13 @@ function renderSessionView() {
   </div>`;
 }
 
+// Progress only — settings moved out to its own sheet (the sliders button),
+// so there is no longer a second page behind a gear icon here.
 function renderMobileDrawer() {
   if (!ui.mobileDrawerOpen) return '';
-  const body = ui.mobileDrawerView === 'settings' ? renderMobileSettingsView() : renderMobileProgressView();
   return `
   <div class="mobile-drawer-backdrop" data-action="close-mobile-drawer">
-    <aside class="mobile-drawer">${body}</aside>
+    <aside class="mobile-drawer">${renderMobileProgressView()}</aside>
   </div>`;
 }
 
@@ -1036,11 +1026,16 @@ function renderMobileProgressView() {
     </div>
     ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
-    <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
   `;
 }
 
-function renderMobileSettingsView() {
+// Mobile settings, opened by the top bar's sliders button. This is the ONLY
+// settings entry point on mobile — the hamburger sheet used to carry a
+// duplicate of it behind a gear icon, which is what made two of them.
+// '열' is deliberately absent: mobile forces a single column, so the
+// stepper would be inert.
+function renderSettingsSheet() {
+  if (!ui.settingsSheetOpen) return '';
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -1052,55 +1047,63 @@ function renderMobileSettingsView() {
     .join('');
 
   return `
-    <div class="drawer-header">
-      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 17)}</button>
-      설정
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">데이터</div>
-      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
-      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">화면</div>
-      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+  <div class="settings-sheet-backdrop" data-action="close-settings-sheet">
+    <aside class="settings-sheet" role="dialog" aria-label="설정">
+      <div class="sheet-header">
+        설정
+        <button class="drawer-close-btn" data-action="close-settings-sheet" aria-label="닫기">${icon('x', 17)}</button>
+      </div>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">표시</div>
+        <div class="sheet-row sheet-row-stepper">
+          ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">예문</span>
+          ${renderExamplesToggle()}
+        </div>
+        <div class="sheet-row sheet-row-stepper">
+          ${stepperControl('카드 수', settings.count, 'count-dec', 'count-inc')}
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">모드</span>
+          <select data-action="select-mode">${modeOptionsHtml}</select>
+        </div>
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">필터</div>
+        ${renderFilterChips()}
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">화면</div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">밝기</span>
+          <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
   }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
-      ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
-      ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">레이아웃</div>
-      <label class="opt">
-        모드
-        <select data-action="select-mode">${modeOptionsHtml}</select>
-      </label>
-      ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
-      ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">보기</div>
-      <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
-    settings.examples ? '표시' : '숨김'
-  }</button>
-      <div class="chip-group">
-        ${['all', 'unmemorized', 'important']
-          .map((key) => {
-            const labels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
-            const current = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
-            return `<button class="chip-btn ${key === current ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
-              labels[key]
-            }</button>`;
-          })
-          .join('')}
-      </div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">단어 편집</div>
-      <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
-    </div>
-  `;
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">화면 전환</span>
+          ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
+        </div>
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">데이터</div>
+        <div class="sheet-actions">
+          <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+          <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
+          <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">${icon(
+    'pencil',
+    15
+  )} 편집 모드</button>
+        </div>
+      </section>
+    </aside>
+  </div>`;
 }
 
 const MODE_LABELS = { memorize: '암기', 'meaning-test': '의미', 'word-test': '단어' };
@@ -1151,10 +1154,6 @@ function renderToolbar() {
         <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
   }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
-        <button class="chip-btn icon-toggle-btn ${ui.viewDrawerOpen ? 'active' : ''}" data-action="toggle-view-drawer" aria-label="보기 설정">${icon(
-    'sliders-horizontal',
-    16
-  )}</button>
       </div>
       <div class="toolbar-group toolbar-group-right">
         ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
@@ -1167,27 +1166,41 @@ function renderToolbar() {
   </div>`;
 }
 
-function renderViewDrawer() {
-  const filterLabels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
-  const currentFilterKey = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
-  return `
-  <div class="view-drawer">
-    ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-    <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
+const FILTER_LABELS = { all: '전체', unmemorized: '미암기만', important: '중요만' };
+
+function currentFilterKey() {
+  return ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
+}
+
+function renderFilterChips() {
+  const current = currentFilterKey();
+  return `<div class="chip-group">${Object.keys(FILTER_LABELS)
+    .map(
+      (key) =>
+        `<button class="chip-btn ${key === current ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
+          FILTER_LABELS[key]
+        }</button>`
+    )
+    .join('')}</div>`;
+}
+
+function renderExamplesToggle() {
+  return `<button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
     settings.examples ? '표시' : '숨김'
-  }</button>
+  }</button>`;
+}
+
+// PC: a permanent row under the system bar (no toggle to open it). The same
+// three controls also appear in the mobile settings sheet, so they're built
+// from the shared pieces above rather than duplicated.
+function renderViewOptionsRow() {
+  return `
+  <div class="view-options-row">
+    ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+    ${renderExamplesToggle()}
     <div class="opt">
       필터
-      <div class="chip-group">
-        ${Object.keys(filterLabels)
-          .map(
-            (key) =>
-              `<button class="chip-btn ${key === currentFilterKey ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
-                filterLabels[key]
-              }</button>`
-          )
-          .join('')}
-      </div>
+      ${renderFilterChips()}
     </div>
   </div>`;
 }
@@ -1810,6 +1823,15 @@ document.getElementById('app').addEventListener('click', (e) => {
   }
 
   if (
+    (e.target.dataset && e.target.dataset.action === 'close-settings-sheet') ||
+    e.target.closest('.drawer-close-btn[data-action="close-settings-sheet"]')
+  ) {
+    ui.settingsSheetOpen = false;
+    render();
+    return;
+  }
+
+  if (
     (e.target.dataset && e.target.dataset.action === 'close-advanced-search') ||
     e.target.closest('.modal-close[data-action="close-advanced-search"]')
   ) {
@@ -2110,21 +2132,6 @@ document.getElementById('app').addEventListener('click', (e) => {
   const openDrawerBtn = e.target.closest('[data-action="open-mobile-drawer"]');
   if (openDrawerBtn) {
     ui.mobileDrawerOpen = true;
-    ui.mobileDrawerView = 'progress';
-    render();
-    return;
-  }
-
-  const openMobileSettingsBtn = e.target.closest('[data-action="open-mobile-settings"]');
-  if (openMobileSettingsBtn) {
-    ui.mobileDrawerView = 'settings';
-    render();
-    return;
-  }
-
-  const backToProgressBtn = e.target.closest('[data-action="back-to-progress"]');
-  if (backToProgressBtn) {
-    ui.mobileDrawerView = 'progress';
     render();
     return;
   }
@@ -2232,9 +2239,9 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const viewDrawerToggleBtn = e.target.closest('[data-action="toggle-view-drawer"]');
-  if (viewDrawerToggleBtn) {
-    ui.viewDrawerOpen = !ui.viewDrawerOpen;
+  const settingsSheetToggleBtn = e.target.closest('[data-action="toggle-settings-sheet"]');
+  if (settingsSheetToggleBtn) {
+    ui.settingsSheetOpen = !ui.settingsSheetOpen;
     render();
     return;
   }

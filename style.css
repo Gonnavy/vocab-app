@@ -2,6 +2,8 @@
   /* card-scoped font (font-size control only affects word-card text) */
   --card-font-family: 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif;
   --card-font-size: 15px;
+  /* recomputed in render() from --card-font-size — see the headword note there */
+  --card-headword-size: 26px;
   /* numbers/labels — mixed into Korean text, falls back per-character for
      the glyphs it doesn't cover (Barlow Condensed is Latin/digits only) */
   --font-heading: 'Barlow Condensed', 'IBM Plex Sans KR', sans-serif;
@@ -129,8 +131,8 @@ svg.lucide {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 0 20px;
+  gap: 2px;
+  padding: 0 14px;
   border-left: 1px solid var(--rule-soft);
 }
 
@@ -181,17 +183,19 @@ svg.lucide {
   color: var(--paper);
 }
 
-/* Now a sibling of .toolbar rather than a child (so it also shows on mobile,
-   where the toolbar is hidden) — hence its own bottom rule instead of
-   relying on the toolbar's box. */
-.view-drawer {
+/* Always-visible options row under the system bar on PC (no toggle). Hidden
+   on mobile, where the same controls live in the settings sheet. */
+body.is-mobile .view-options-row {
+  display: none;
+}
+
+.view-options-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 24px;
-  padding: 14px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--rule-soft);
-  animation: riseIn 0.15s ease-out;
 }
 
 .btn {
@@ -861,7 +865,7 @@ svg.lucide {
     minmax(var(--card-word-side), auto);
   align-items: center;
   column-gap: 6px;
-  font-size: 26px;
+  font-size: var(--card-headword-size);
   font-weight: 600;
   letter-spacing: -0.02em;
   padding: 0 0 12px;
@@ -1047,8 +1051,13 @@ svg.lucide {
   user-select: none;
 }
 
-.meaning-item:hover {
-  background: color-mix(in srgb, #cf8a13 16%, transparent);
+/* Hover-capable pointers only. On touch, :hover latches after a tap and the
+   orange stayed painted on the row long after the finger left — that stuck
+   highlight was the "long-press box that won't go away". */
+@media (hover: hover) and (pointer: fine) {
+  .meaning-item:hover {
+    background: color-mix(in srgb, #cf8a13 16%, transparent);
+  }
 }
 
 .check-btn {
@@ -1840,9 +1849,9 @@ svg.lucide {
    re-renders when the answer flips, so the class never goes stale. */
 
 .mobile-topbar,
-.mobile-strips,
 .mobile-bottom-bar,
-.mobile-drawer-backdrop {
+.mobile-drawer-backdrop,
+.settings-sheet-backdrop {
   display: none;
 }
 
@@ -1987,43 +1996,12 @@ body.is-mobile .mobile-device-toggle-btn {
   cursor: pointer;
 }
 
-/* ---------- progress strips ---------- */
-
-body.is-mobile .mobile-strips {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 2px;
-}
-
-body.is-mobile .mobile-memo-strip {
-  height: 14px;
-}
-
-body.is-mobile .mobile-memo-strip .bar-cell {
-  background: var(--fill);
-}
-
-body.is-mobile .mobile-memo-strip .bar-cell.filled {
-  background: var(--steel);
-}
-
-body.is-mobile .mobile-important-strip {
-  height: 6px;
-}
-
-body.is-mobile .mobile-important-strip .bar-cell {
-  box-shadow: inset 0 0 0 1px var(--fill);
-}
-
-body.is-mobile .mobile-important-strip .bar-cell.filled {
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-
 /* ---------- feed / card touch targets ---------- */
 
+/* Mobile runs 3px under the PC headword — that lands on the documented 23px
+   at the default body size, and still tracks the font-size setting. */
 body.is-mobile .card-word {
-  font-size: 23px;
+  font-size: calc(var(--card-headword-size) - 3px);
 }
 
 /* The leading square is the memorize toggle here — always visible (filled =
@@ -2141,6 +2119,102 @@ body.is-mobile .mobile-drawer-backdrop {
   z-index: 60;
 }
 
+/* ---------- settings sheet (mobile, sliders button) ----------
+   Spacing sticks to the documented 8/10/12/14/20/24 steps: 20px sheet
+   padding, 24px between groups, 14px inside a group, 10px between a label
+   and its control. Groups are separated by a rule, nothing else is. */
+
+body.is-mobile .settings-sheet-backdrop {
+  display: flex;
+  align-items: flex-end;
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  z-index: 70;
+}
+
+body.is-mobile .settings-sheet {
+  width: 100%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 0.2s ease-out;
+}
+
+body.is-mobile .settings-sheet > * {
+  flex-shrink: 0;
+}
+
+body.is-mobile .sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+body.is-mobile .sheet-group + .sheet-group {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+body.is-mobile .sheet-group-title {
+  margin-bottom: 14px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+body.is-mobile .sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+
+body.is-mobile .sheet-row + .sheet-row {
+  border-top: 1px solid var(--rule-soft);
+}
+
+body.is-mobile .sheet-row-label {
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+/* A stepper carries its own label, so these rows skip .sheet-row-label and
+   let the stepper itself span the row — otherwise the name shows twice. */
+body.is-mobile .sheet-row-stepper > .opt {
+  flex: 1;
+  justify-content: space-between;
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+body.is-mobile .sheet-row select {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 6px 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body.is-mobile .sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 body.is-mobile .mobile-drawer {
   width: 100%;
   max-height: 82vh;
@@ -2170,8 +2244,7 @@ body.is-mobile .drawer-header {
   margin-bottom: 12px;
 }
 
-body.is-mobile .drawer-close-btn,
-body.is-mobile .drawer-back-btn {
+body.is-mobile .drawer-close-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2209,21 +2282,6 @@ body.is-mobile .drawer-settings-btn {
   cursor: pointer;
 }
 
-body.is-mobile .settings-section {
-  margin-bottom: 16px;
-}
-
-body.is-mobile .settings-section-title {
-  margin-bottom: 8px;
-  font-weight: 700;
-  font-size: 0.85em;
-  color: var(--muted);
-}
-
-body.is-mobile .settings-section > * {
-  margin-bottom: 8px;
-}
-
 body.is-mobile .opt {
   font-size: 0.85em;
 }
@@ -2235,11 +2293,18 @@ body.is-mobile .word-card.focused {
 }
 
 /* Long-press means "toggle 중요" — without this the same press also reads as
-   "select this text" and pops the native callout menu on top of it. */
+   "select this text" and pops the native callout menu on top of it.
+   tap-highlight is the grey/orange flash WebKit paints on tap, which also
+   lingered after a long press. */
 body.is-mobile .word-card {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.is-mobile .meaning-item {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Users who ask the OS for less motion get the end state immediately —

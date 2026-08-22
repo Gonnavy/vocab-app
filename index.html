@@ -20,6 +20,8 @@
   /* card-scoped font (font-size control only affects word-card text) */
   --card-font-family: 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif;
   --card-font-size: 15px;
+  /* recomputed in render() from --card-font-size — see the headword note there */
+  --card-headword-size: 26px;
   /* numbers/labels — mixed into Korean text, falls back per-character for
      the glyphs it doesn't cover (Barlow Condensed is Latin/digits only) */
   --font-heading: 'Barlow Condensed', 'IBM Plex Sans KR', sans-serif;
@@ -147,8 +149,8 @@ svg.lucide {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 0 20px;
+  gap: 2px;
+  padding: 0 14px;
   border-left: 1px solid var(--rule-soft);
 }
 
@@ -199,17 +201,19 @@ svg.lucide {
   color: var(--paper);
 }
 
-/* Now a sibling of .toolbar rather than a child (so it also shows on mobile,
-   where the toolbar is hidden) — hence its own bottom rule instead of
-   relying on the toolbar's box. */
-.view-drawer {
+/* Always-visible options row under the system bar on PC (no toggle). Hidden
+   on mobile, where the same controls live in the settings sheet. */
+body.is-mobile .view-options-row {
+  display: none;
+}
+
+.view-options-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 24px;
-  padding: 14px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--rule-soft);
-  animation: riseIn 0.15s ease-out;
 }
 
 .btn {
@@ -879,7 +883,7 @@ svg.lucide {
     minmax(var(--card-word-side), auto);
   align-items: center;
   column-gap: 6px;
-  font-size: 26px;
+  font-size: var(--card-headword-size);
   font-weight: 600;
   letter-spacing: -0.02em;
   padding: 0 0 12px;
@@ -1065,8 +1069,13 @@ svg.lucide {
   user-select: none;
 }
 
-.meaning-item:hover {
-  background: color-mix(in srgb, #cf8a13 16%, transparent);
+/* Hover-capable pointers only. On touch, :hover latches after a tap and the
+   orange stayed painted on the row long after the finger left — that stuck
+   highlight was the "long-press box that won't go away". */
+@media (hover: hover) and (pointer: fine) {
+  .meaning-item:hover {
+    background: color-mix(in srgb, #cf8a13 16%, transparent);
+  }
 }
 
 .check-btn {
@@ -1858,9 +1867,9 @@ svg.lucide {
    re-renders when the answer flips, so the class never goes stale. */
 
 .mobile-topbar,
-.mobile-strips,
 .mobile-bottom-bar,
-.mobile-drawer-backdrop {
+.mobile-drawer-backdrop,
+.settings-sheet-backdrop {
   display: none;
 }
 
@@ -2005,43 +2014,12 @@ body.is-mobile .mobile-device-toggle-btn {
   cursor: pointer;
 }
 
-/* ---------- progress strips ---------- */
-
-body.is-mobile .mobile-strips {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 2px;
-}
-
-body.is-mobile .mobile-memo-strip {
-  height: 14px;
-}
-
-body.is-mobile .mobile-memo-strip .bar-cell {
-  background: var(--fill);
-}
-
-body.is-mobile .mobile-memo-strip .bar-cell.filled {
-  background: var(--steel);
-}
-
-body.is-mobile .mobile-important-strip {
-  height: 6px;
-}
-
-body.is-mobile .mobile-important-strip .bar-cell {
-  box-shadow: inset 0 0 0 1px var(--fill);
-}
-
-body.is-mobile .mobile-important-strip .bar-cell.filled {
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-
 /* ---------- feed / card touch targets ---------- */
 
+/* Mobile runs 3px under the PC headword — that lands on the documented 23px
+   at the default body size, and still tracks the font-size setting. */
 body.is-mobile .card-word {
-  font-size: 23px;
+  font-size: calc(var(--card-headword-size) - 3px);
 }
 
 /* The leading square is the memorize toggle here — always visible (filled =
@@ -2159,6 +2137,102 @@ body.is-mobile .mobile-drawer-backdrop {
   z-index: 60;
 }
 
+/* ---------- settings sheet (mobile, sliders button) ----------
+   Spacing sticks to the documented 8/10/12/14/20/24 steps: 20px sheet
+   padding, 24px between groups, 14px inside a group, 10px between a label
+   and its control. Groups are separated by a rule, nothing else is. */
+
+body.is-mobile .settings-sheet-backdrop {
+  display: flex;
+  align-items: flex-end;
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  z-index: 70;
+}
+
+body.is-mobile .settings-sheet {
+  width: 100%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 0.2s ease-out;
+}
+
+body.is-mobile .settings-sheet > * {
+  flex-shrink: 0;
+}
+
+body.is-mobile .sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+body.is-mobile .sheet-group + .sheet-group {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+body.is-mobile .sheet-group-title {
+  margin-bottom: 14px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+body.is-mobile .sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+}
+
+body.is-mobile .sheet-row + .sheet-row {
+  border-top: 1px solid var(--rule-soft);
+}
+
+body.is-mobile .sheet-row-label {
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+/* A stepper carries its own label, so these rows skip .sheet-row-label and
+   let the stepper itself span the row — otherwise the name shows twice. */
+body.is-mobile .sheet-row-stepper > .opt {
+  flex: 1;
+  justify-content: space-between;
+  font-size: 0.95em;
+  color: var(--ink);
+}
+
+body.is-mobile .sheet-row select {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 6px 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body.is-mobile .sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 body.is-mobile .mobile-drawer {
   width: 100%;
   max-height: 82vh;
@@ -2188,8 +2262,7 @@ body.is-mobile .drawer-header {
   margin-bottom: 12px;
 }
 
-body.is-mobile .drawer-close-btn,
-body.is-mobile .drawer-back-btn {
+body.is-mobile .drawer-close-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2227,21 +2300,6 @@ body.is-mobile .drawer-settings-btn {
   cursor: pointer;
 }
 
-body.is-mobile .settings-section {
-  margin-bottom: 16px;
-}
-
-body.is-mobile .settings-section-title {
-  margin-bottom: 8px;
-  font-weight: 700;
-  font-size: 0.85em;
-  color: var(--muted);
-}
-
-body.is-mobile .settings-section > * {
-  margin-bottom: 8px;
-}
-
 body.is-mobile .opt {
   font-size: 0.85em;
 }
@@ -2253,11 +2311,18 @@ body.is-mobile .word-card.focused {
 }
 
 /* Long-press means "toggle 중요" — without this the same press also reads as
-   "select this text" and pops the native callout menu on top of it. */
+   "select this text" and pops the native callout menu on top of it.
+   tap-highlight is the grey/orange flash WebKit paints on tap, which also
+   lingered after a long press. */
 body.is-mobile .word-card {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.is-mobile .meaning-item {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Users who ask the OS for less motion get the end state immediately —
@@ -2676,9 +2741,8 @@ const ui = {
   shuffledIds: null, // word ids in shuffled order, snapshot of the filtered range at shuffle time
   preShuffleStartIndex: 0, // restored when shuffle is toggled back off
   mobileDrawerOpen: false, // mobile-only: hamburger-triggered left drawer
-  mobileDrawerView: 'progress', // 'progress' | 'settings', which drawer page is showing
   helpOpen: false,
-  viewDrawerOpen: false, // toolbar's sliders-horizontal toggle — font size/examples/filter/reset
+  settingsSheetOpen: false, // mobile-only: the sliders button's own bottom sheet
   editMode: false,
   editSelectedIds: new Set(), // word ids marked (via drag) for bulk delete while editing
   editHistory: [], // {words, progress} snapshots, most-recent last — reset each time edit mode is entered
@@ -3327,6 +3391,13 @@ function render() {
   document.body.classList.toggle('is-mobile', isMobileLayout());
 
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
+  // Headword tracks the body size but at a damped rate (0.6×), so it always
+  // stays clearly larger than the meanings instead of the two converging.
+  // Clamped so the extremes of the 12–22 range can't run away.
+  const headword = Math.round(
+    Math.min(32, Math.max(22, 26 + (settings.fontSize - DEFAULT_SETTINGS.fontSize) * 0.6))
+  );
+  document.documentElement.style.setProperty('--card-headword-size', headword + 'px');
 
   const app = document.getElementById('app');
 
@@ -3349,16 +3420,14 @@ function render() {
 
   app.innerHTML =
     renderMobileTopBar() +
-    renderMobileProgressStrips() +
     renderToolbar() +
-    // Outside the toolbar so it still appears on mobile, where the toolbar
-    // itself is hidden and the drawer is opened from the top bar instead.
-    (ui.viewDrawerOpen ? renderViewDrawer() : '') +
+    renderViewOptionsRow() +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
     (ui.session || ui.editMode ? '' : renderMobileBottomBar(filtered.length)) +
     renderMobileDrawer() +
+    renderSettingsSheet() +
     (ui.exportOpen ? renderExportPanel() : '') +
     (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
     (ui.helpOpen ? renderHelpPanel() : '');
@@ -3419,24 +3488,9 @@ function renderMobileTopBar() {
       ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
       <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
       <button class="mobile-view-btn ${
-        ui.viewDrawerOpen ? 'active' : ''
-      }" data-action="toggle-view-drawer" aria-label="보기 설정">${icon('sliders-horizontal', 17)}</button>
+        ui.settingsSheetOpen ? 'active' : ''
+      }" data-action="toggle-settings-sheet" aria-label="설정">${icon('sliders-horizontal', 17)}</button>
     </span>
-  </div>`;
-}
-
-// The same two 20-cell bars the progress panel shows, surfaced directly
-// under the mobile top bar (thinner: 14px / 6px).
-function renderMobileProgressStrips() {
-  const stats = computeStats();
-  const cells = (filled) =>
-    Array.from({ length: 20 }, (_, i) => `<div class="bar-cell ${i < filled ? 'filled' : ''}"></div>`).join('');
-  return `
-  <div class="mobile-strips">
-    <div class="bar-20 mobile-memo-strip" aria-label="암기율 ${stats.memoRate}%">${cells(stats.memoBarFilled)}</div>
-    <div class="bar-20 mobile-important-strip" aria-label="중요 표시 ${stats.importantRate}%">${cells(
-    stats.importantBarFilled
-  )}</div>
   </div>`;
 }
 
@@ -3574,12 +3628,13 @@ function renderSessionView() {
   </div>`;
 }
 
+// Progress only — settings moved out to its own sheet (the sliders button),
+// so there is no longer a second page behind a gear icon here.
 function renderMobileDrawer() {
   if (!ui.mobileDrawerOpen) return '';
-  const body = ui.mobileDrawerView === 'settings' ? renderMobileSettingsView() : renderMobileProgressView();
   return `
   <div class="mobile-drawer-backdrop" data-action="close-mobile-drawer">
-    <aside class="mobile-drawer">${body}</aside>
+    <aside class="mobile-drawer">${renderMobileProgressView()}</aside>
   </div>`;
 }
 
@@ -3694,11 +3749,16 @@ function renderMobileProgressView() {
     </div>
     ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
-    <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
   `;
 }
 
-function renderMobileSettingsView() {
+// Mobile settings, opened by the top bar's sliders button. This is the ONLY
+// settings entry point on mobile — the hamburger sheet used to carry a
+// duplicate of it behind a gear icon, which is what made two of them.
+// '열' is deliberately absent: mobile forces a single column, so the
+// stepper would be inert.
+function renderSettingsSheet() {
+  if (!ui.settingsSheetOpen) return '';
   const modeLabels = { memorize: '암기', 'meaning-test': '의미 테스트', 'word-test': '단어 테스트' };
   const modeOptionsHtml = Object.keys(modeLabels)
     .map(
@@ -3710,55 +3770,63 @@ function renderMobileSettingsView() {
     .join('');
 
   return `
-    <div class="drawer-header">
-      <button class="drawer-back-btn" data-action="back-to-progress" aria-label="뒤로">${icon('arrow-left', 17)}</button>
-      설정
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">데이터</div>
-      <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
-      <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">화면</div>
-      <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
+  <div class="settings-sheet-backdrop" data-action="close-settings-sheet">
+    <aside class="settings-sheet" role="dialog" aria-label="설정">
+      <div class="sheet-header">
+        설정
+        <button class="drawer-close-btn" data-action="close-settings-sheet" aria-label="닫기">${icon('x', 17)}</button>
+      </div>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">표시</div>
+        <div class="sheet-row sheet-row-stepper">
+          ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">예문</span>
+          ${renderExamplesToggle()}
+        </div>
+        <div class="sheet-row sheet-row-stepper">
+          ${stepperControl('카드 수', settings.count, 'count-dec', 'count-inc')}
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">모드</span>
+          <select data-action="select-mode">${modeOptionsHtml}</select>
+        </div>
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">필터</div>
+        ${renderFilterChips()}
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">화면</div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">밝기</span>
+          <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
   }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
-      ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
-      ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">레이아웃</div>
-      <label class="opt">
-        모드
-        <select data-action="select-mode">${modeOptionsHtml}</select>
-      </label>
-      ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
-      ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">보기</div>
-      <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
-    settings.examples ? '표시' : '숨김'
-  }</button>
-      <div class="chip-group">
-        ${['all', 'unmemorized', 'important']
-          .map((key) => {
-            const labels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
-            const current = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
-            return `<button class="chip-btn ${key === current ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
-              labels[key]
-            }</button>`;
-          })
-          .join('')}
-      </div>
-    </div>
-    <div class="settings-section">
-      <div class="settings-section-title">단어 편집</div>
-      <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
-    </div>
-  `;
+        </div>
+        <div class="sheet-row">
+          <span class="sheet-row-label">화면 전환</span>
+          ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
+        </div>
+      </section>
+
+      <section class="sheet-group">
+        <div class="sheet-group-title">데이터</div>
+        <div class="sheet-actions">
+          <button class="btn btn-open" data-action="open-csv">${icon('folder-open', 15)} 열기</button>
+          <button class="btn" data-action="open-export">${icon('download', 15)} 내보내기</button>
+          <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">${icon(
+    'pencil',
+    15
+  )} 편집 모드</button>
+        </div>
+      </section>
+    </aside>
+  </div>`;
 }
 
 const MODE_LABELS = { memorize: '암기', 'meaning-test': '의미', 'word-test': '단어' };
@@ -3809,10 +3877,6 @@ function renderToolbar() {
         <button class="chip-btn icon-toggle-btn ${settings.darkMode ? 'active' : ''}" data-action="toggle-dark" aria-label="${
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
   }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
-        <button class="chip-btn icon-toggle-btn ${ui.viewDrawerOpen ? 'active' : ''}" data-action="toggle-view-drawer" aria-label="보기 설정">${icon(
-    'sliders-horizontal',
-    16
-  )}</button>
       </div>
       <div class="toolbar-group toolbar-group-right">
         ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
@@ -3825,27 +3889,41 @@ function renderToolbar() {
   </div>`;
 }
 
-function renderViewDrawer() {
-  const filterLabels = { all: '전체', unmemorized: '미암기만', important: '중요만' };
-  const currentFilterKey = ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
-  return `
-  <div class="view-drawer">
-    ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
-    <button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
+const FILTER_LABELS = { all: '전체', unmemorized: '미암기만', important: '중요만' };
+
+function currentFilterKey() {
+  return ui.filterMode === 'unmemorized' ? 'unmemorized' : ui.filterMode === 'important' ? 'important' : 'all';
+}
+
+function renderFilterChips() {
+  const current = currentFilterKey();
+  return `<div class="chip-group">${Object.keys(FILTER_LABELS)
+    .map(
+      (key) =>
+        `<button class="chip-btn ${key === current ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
+          FILTER_LABELS[key]
+        }</button>`
+    )
+    .join('')}</div>`;
+}
+
+function renderExamplesToggle() {
+  return `<button class="chip-btn ${settings.examples ? 'active' : ''}" data-action="toggle-examples">예문 ${
     settings.examples ? '표시' : '숨김'
-  }</button>
+  }</button>`;
+}
+
+// PC: a permanent row under the system bar (no toggle to open it). The same
+// three controls also appear in the mobile settings sheet, so they're built
+// from the shared pieces above rather than duplicated.
+function renderViewOptionsRow() {
+  return `
+  <div class="view-options-row">
+    ${stepperControl('글자 크기', settings.fontSize, 'font-size-dec', 'font-size-inc')}
+    ${renderExamplesToggle()}
     <div class="opt">
       필터
-      <div class="chip-group">
-        ${Object.keys(filterLabels)
-          .map(
-            (key) =>
-              `<button class="chip-btn ${key === currentFilterKey ? 'active' : ''}" data-action="view-drawer-filter" data-filter="${key}">${
-                filterLabels[key]
-              }</button>`
-          )
-          .join('')}
-      </div>
+      ${renderFilterChips()}
     </div>
   </div>`;
 }
@@ -4468,6 +4546,15 @@ document.getElementById('app').addEventListener('click', (e) => {
   }
 
   if (
+    (e.target.dataset && e.target.dataset.action === 'close-settings-sheet') ||
+    e.target.closest('.drawer-close-btn[data-action="close-settings-sheet"]')
+  ) {
+    ui.settingsSheetOpen = false;
+    render();
+    return;
+  }
+
+  if (
     (e.target.dataset && e.target.dataset.action === 'close-advanced-search') ||
     e.target.closest('.modal-close[data-action="close-advanced-search"]')
   ) {
@@ -4768,21 +4855,6 @@ document.getElementById('app').addEventListener('click', (e) => {
   const openDrawerBtn = e.target.closest('[data-action="open-mobile-drawer"]');
   if (openDrawerBtn) {
     ui.mobileDrawerOpen = true;
-    ui.mobileDrawerView = 'progress';
-    render();
-    return;
-  }
-
-  const openMobileSettingsBtn = e.target.closest('[data-action="open-mobile-settings"]');
-  if (openMobileSettingsBtn) {
-    ui.mobileDrawerView = 'settings';
-    render();
-    return;
-  }
-
-  const backToProgressBtn = e.target.closest('[data-action="back-to-progress"]');
-  if (backToProgressBtn) {
-    ui.mobileDrawerView = 'progress';
     render();
     return;
   }
@@ -4890,9 +4962,9 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
-  const viewDrawerToggleBtn = e.target.closest('[data-action="toggle-view-drawer"]');
-  if (viewDrawerToggleBtn) {
-    ui.viewDrawerOpen = !ui.viewDrawerOpen;
+  const settingsSheetToggleBtn = e.target.closest('[data-action="toggle-settings-sheet"]');
+  if (settingsSheetToggleBtn) {
+    ui.settingsSheetOpen = !ui.settingsSheetOpen;
     render();
     return;
   }
