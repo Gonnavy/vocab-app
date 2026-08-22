@@ -796,6 +796,124 @@ svg.lucide {
   margin-bottom: 12px;
 }
 
+/* ---------- progress bars (20 cells, one per 5%) ---------- */
+
+.progress-numbers {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.progress-percent {
+  font-family: var(--font-heading);
+  font-size: 62px;
+  font-weight: 600;
+  line-height: 0.85;
+}
+
+.progress-percent .unit {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.progress-count {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bar-20 {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+}
+
+.memo-bar {
+  height: 26px;
+  margin-bottom: 14px;
+}
+
+.memo-bar .bar-cell {
+  background: var(--fill);
+}
+
+.memo-bar .bar-cell.filled {
+  background: var(--steel);
+}
+
+.important-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.important-strip-label {
+  flex: 0 0 auto;
+  font-family: var(--font-heading);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.important-strip {
+  flex: 1;
+  height: 10px;
+}
+
+.important-strip .bar-cell {
+  box-shadow: inset 0 0 0 1px var(--fill);
+}
+
+.important-strip .bar-cell.filled {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.important-strip-pct {
+  flex: 0 0 auto;
+  font-family: var(--font-heading);
+  font-size: 0.78em;
+  color: var(--muted);
+}
+
+.progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.8em;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-swatch {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+}
+
+.legend-swatch.legend-memo {
+  background: var(--steel);
+}
+
+.legend-swatch.legend-important {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.legend-swatch.legend-unmemo {
+  background: var(--fill);
+}
+
 .stat-row {
   display: flex;
   justify-content: space-between;
@@ -888,24 +1006,33 @@ svg.lucide {
   font-family: var(--font-heading);
 }
 
-.cat-sub-row {
+.cat-chip-group {
   display: flex;
-  justify-content: space-between;
-  padding: 3px 8px;
-  font-size: 0.8em;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 4px 4px;
+}
+
+.cat-chip {
+  border: 1px solid var(--rule);
+  background: var(--paper);
   color: var(--muted);
   border-radius: 0;
+  padding: 3px 9px;
+  font-size: 0.78em;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.cat-sub-row:hover {
-  background: var(--fill);
+.cat-chip:hover {
+  border-color: var(--steel);
+  color: var(--steel-txt);
 }
 
-.cat-sub-row.active {
+.cat-chip.active {
   background: var(--steel-soft);
+  border-color: var(--steel);
   color: var(--steel-txt);
-  font-weight: 700;
 }
 
 /* ---------- export / advanced-search / help modals ---------- */

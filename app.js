@@ -207,6 +207,15 @@ function toggleImportant(id) {
   render();
 }
 
+// 20-cell bar, one cell per 5% — filled count always floors from the raw
+// ratio (never from an already-rounded display percentage), so a cell only
+// fills once its full 5% share is reached. See computeStats' memoBarFilled/
+// importantBarFilled.
+function barFilledCount(count, total) {
+  if (!total) return 0;
+  return Math.floor(((count / total) * 100) / 5);
+}
+
 function computeStats() {
   const total = words.length;
   const memorized = words.filter(isMemorized).length;
@@ -230,8 +239,13 @@ function computeStats() {
     total,
     memorized,
     memoRate: total ? Math.round((memorized / total) * 100) : 0,
+    memoBarFilled: barFilledCount(memorized, total),
     unmemorized,
+    // "중요" is independent of memorized — its own 20-cell strip/percentage,
+    // never derived from or combined with the memorized ratio.
     important,
+    importantRate: total ? Math.round((important / total) * 100) : 0,
+    importantBarFilled: barFilledCount(important, total),
     byCategory,
   };
 }
@@ -595,8 +609,18 @@ function renderMobileDrawer() {
   </div>`;
 }
 
-function renderMobileProgressView() {
-  const stats = computeStats();
+// Shared by the desktop progress panel and the mobile drawer's progress
+// view — same stats markup either way, just wrapped in different chrome
+// (panel header + collapse toggle vs. drawer header + close button).
+function renderProgressBody(stats) {
+  const memoBarHtml = Array.from(
+    { length: 20 },
+    (_, i) => `<div class="bar-cell ${i < stats.memoBarFilled ? 'filled' : ''}"></div>`
+  ).join('');
+  const importantBarHtml = Array.from(
+    { length: 20 },
+    (_, i) => `<div class="bar-cell ${i < stats.importantBarFilled ? 'filled' : ''}"></div>`
+  ).join('');
 
   const filterRow = (label, key) => `
     <div class="stat-row clickable ${ui.filterMode === key && !ui.activeCategory ? 'active' : ''}" data-action="stat-filter" data-filter="${key}">
@@ -606,11 +630,14 @@ function renderMobileProgressView() {
 
   const perCategoryHtml = stats.byCategory
     .map((c) => {
-      const subRow = (label, key) => {
-        const isActive = ui.activeCategory === c.category && ui.filterMode === key;
-        return `<div class="cat-sub-row ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
+      // '' (전체) normalizes to "no filter within this category" — see the
+      // stat-category-filter click handler, which does the same when
+      // reading data-filter back off the button.
+      const chip = (label, key, count) => {
+        const isActive = ui.activeCategory === c.category && (key ? ui.filterMode === key : !ui.filterMode);
+        return `<button class="cat-chip ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
           c.category
-        )}" data-filter="${key}"><span>${label}</span><span>${c[key]}개</span></div>`;
+        )}" data-filter="${key}">${label} ${count}개</button>`;
       };
       const collapsed = ui.collapsedCategories.has(c.category);
       return `
@@ -627,7 +654,11 @@ function renderMobileProgressView() {
         ${
           collapsed
             ? ''
-            : `${subRow('미암기', 'unmemorized')}${subRow('중요', 'important')}`
+            : `<div class="cat-chip-group">${chip('전체', '', c.total)}${chip(
+                '미암기',
+                'unmemorized',
+                c.unmemorized
+              )}${chip('중요', 'important', c.important)}</div>`
         }
       </div>`;
     })
@@ -636,24 +667,38 @@ function renderMobileProgressView() {
   const allActive = !ui.filterMode && !ui.activeCategory;
 
   return `
-    <div class="drawer-header">
-      진행률
-      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
+    <div class="progress-numbers">
+      <div class="progress-percent">${stats.memoRate}<span class="unit">%</span></div>
+      <div class="progress-count">${stats.memorized} / ${stats.total} 단어</div>
     </div>
-    <div class="stat-row static">
-      <span>전체 개수</span>
-      <span>${stats.total}개</span>
+    <div class="bar-20 memo-bar" aria-label="암기율 ${stats.memoRate}%">${memoBarHtml}</div>
+    <div class="important-strip-row">
+      <span class="important-strip-label">중요</span>
+      <div class="bar-20 important-strip" aria-label="중요 표시 ${stats.importantRate}%">${importantBarHtml}</div>
+      <span class="important-strip-pct">${stats.importantRate}%</span>
     </div>
-    <div class="stat-row static">
-      <span>암기율</span>
-      <span><small>${stats.total}개 중 ${stats.memorized}개</small> ${stats.memoRate}%</span>
+    <div class="progress-legend">
+      <span class="legend-item"><span class="legend-swatch legend-memo"></span>암기 ${stats.memorized}</span>
+      <span class="legend-item"><span class="legend-swatch legend-important"></span>중요 ${stats.important}</span>
+      <span class="legend-item"><span class="legend-swatch legend-unmemo"></span>미암기 ${stats.unmemorized}</span>
     </div>
     <div class="stat-row clickable ${allActive ? 'active' : ''}" data-action="tab" data-category="">
       <span>전체 보기</span>
     </div>
     ${filterRow('미암기', 'unmemorized')}
     ${filterRow('중요', 'important')}
-    <div class="cat-stats">${perCategoryHtml}</div>
+    <div class="cat-stats">${perCategoryHtml}</div>`;
+}
+
+function renderMobileProgressView() {
+  const stats = computeStats();
+
+  return `
+    <div class="drawer-header">
+      진행률
+      <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 18)}</button>
+    </div>
+    ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
   `;
@@ -992,41 +1037,6 @@ function renderEditableCard(word, p, index, focused) {
 function renderProgressPanel() {
   const stats = computeStats();
 
-  const filterRow = (label, key) => `
-    <div class="stat-row clickable ${ui.filterMode === key && !ui.activeCategory ? 'active' : ''}" data-action="stat-filter" data-filter="${key}">
-      <span>${label}</span>
-      <span>${stats[key]}개</span>
-    </div>`;
-
-  const perCategoryHtml = stats.byCategory
-    .map((c) => {
-      const subRow = (label, key) => {
-        const isActive = ui.activeCategory === c.category && ui.filterMode === key;
-        return `<div class="cat-sub-row ${isActive ? 'active' : ''}" data-action="stat-category-filter" data-category="${escapeHtml(
-          c.category
-        )}" data-filter="${key}"><span>${label}</span><span>${c[key]}개</span></div>`;
-      };
-      const collapsed = ui.collapsedCategories.has(c.category);
-      return `
-      <div class="cat-stat">
-        <div class="cat-stat-header">
-          <button class="cat-fold-btn ${collapsed ? 'collapsed' : ''}" data-action="toggle-fold" data-category="${escapeHtml(
-        c.category
-      )}" aria-label="접기/펼치기">${icon('chevron-down', 14)}</button>
-          <span class="cat-stat-name" data-action="tab" data-category="${escapeHtml(c.category)}">${escapeHtml(
-        c.category
-      )}</span>
-          <span class="cat-stat-rate">${c.rate}%</span>
-        </div>
-        ${
-          collapsed
-            ? ''
-            : `${subRow('미암기', 'unmemorized')}${subRow('중요', 'important')}`
-        }
-      </div>`;
-    })
-    .join('');
-
   if (settings.progressCollapsed) {
     return `
   <aside class="progress-panel collapsed">
@@ -1046,20 +1056,7 @@ function renderProgressPanel() {
         15
       )}</button>
     </div>
-    <div class="stat-row static">
-      <span>전체 개수</span>
-      <span>${stats.total}개</span>
-    </div>
-    <div class="stat-row static">
-      <span>암기율</span>
-      <span><small>${stats.total}개 중 ${stats.memorized}개</small> ${stats.memoRate}%</span>
-    </div>
-    <div class="stat-row clickable ${!ui.filterMode && !ui.activeCategory ? 'active' : ''}" data-action="tab" data-category="">
-      <span>전체 보기</span>
-    </div>
-    ${filterRow('미암기', 'unmemorized')}
-    ${filterRow('중요', 'important')}
-    <div class="cat-stats">${perCategoryHtml}</div>
+    ${renderProgressBody(stats)}
   </aside>`;
 }
 
@@ -1591,7 +1588,7 @@ document.getElementById('app').addEventListener('click', (e) => {
   const statCategoryFilter = e.target.closest('[data-action="stat-category-filter"]');
   if (statCategoryFilter) {
     const cat = statCategoryFilter.getAttribute('data-category');
-    const filter = statCategoryFilter.getAttribute('data-filter');
+    const filter = statCategoryFilter.getAttribute('data-filter') || null; // '' (전체 칩) normalizes to "no filter"
     const alreadyActive = ui.activeCategory === cat && ui.filterMode === filter;
     deactivateShuffle();
     if (alreadyActive) {
