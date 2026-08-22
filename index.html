@@ -479,36 +479,24 @@ svg.lucide {
   box-shadow: inset 0 0 0 1px var(--steel);
 }
 
-/* ---------- edit mode ---------- */
+/* ---------- edit mode: table (분류 | 표제어 | 뜻) instead of the card grid ---------- */
 
-.word-card.editable {
-  position: relative;
-  cursor: default;
-  gap: 10px;
+.edit-table {
+  display: flex;
+  flex-direction: column;
 }
 
-.word-card.edit-selected {
+.edit-row {
+  display: grid;
+  grid-template-columns: 120px 190px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.edit-row.edit-selected {
   box-shadow: inset 0 0 0 2px var(--danger);
-  background: var(--danger-soft);
-}
-
-.card-edit-delete {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border: 2px solid var(--danger);
-  border-radius: 0;
-  background: var(--paper);
-  color: var(--danger);
-  font-size: 1em;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 1;
-}
-
-.card-edit-delete:hover {
   background: var(--danger-soft);
 }
 
@@ -531,14 +519,50 @@ svg.lucide {
   resize: none;
 }
 
-.edit-word-input {
-  font-size: 1.3em;
-  font-weight: 800;
-  text-align: center;
-  padding-right: 34px;
+/* 분류/표제어: no border until focused, just an underline — README's
+   "포커스 시 밑줄만 스틸로" */
+.edit-inline-field {
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 4px 2px;
+  background: transparent;
 }
 
-.edit-meanings {
+.edit-inline-field:focus {
+  outline: none;
+  border-bottom-color: var(--steel);
+}
+
+.edit-word-input {
+  font-size: 1.15em;
+  font-weight: 700;
+}
+
+.edit-row-word {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-word-delete-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.edit-word-delete-btn:hover {
+  color: var(--danger);
+}
+
+.edit-row-meanings {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -548,11 +572,39 @@ svg.lucide {
   display: flex;
   gap: 6px;
   align-items: flex-start;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+.edit-meaning-row.dragging {
+  opacity: 0.4;
+}
+
+.edit-meaning-row.drop-before {
+  border-top-color: var(--steel);
+}
+
+.edit-meaning-row.drop-after {
+  border-bottom-color: var(--steel);
+}
+
+.edit-meaning-grip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-top: 6px;
+  color: var(--muted);
+  cursor: grab;
+}
+
+.edit-meaning-grip:active {
+  cursor: grabbing;
 }
 
 .edit-meaning-index {
   flex: 0 0 auto;
   padding-top: 8px;
+  font-family: var(--font-heading);
   color: var(--muted);
 }
 
@@ -569,9 +621,24 @@ svg.lucide {
   color: var(--muted);
 }
 
+.edit-meaning-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-top: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.edit-meaning-delete:hover {
+  color: var(--danger);
+}
+
 .edit-add-meaning-btn {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
   margin-top: 4px;
   border: 1px dashed var(--rule);
   border-radius: 0;
@@ -588,32 +655,39 @@ svg.lucide {
   color: var(--steel-txt);
 }
 
-.edit-add-card-btn,
+.edit-add-word-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: none;
+  border-radius: 0;
+  background: var(--steel);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-add-word-btn:hover {
+  opacity: 0.9;
+}
+
 .edit-trash-btn {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 0;
-  cursor: pointer;
-  font-size: 1em;
-  line-height: 1;
-}
-
-.edit-add-card-btn {
-  border: 2px solid var(--steel);
-  background: var(--paper);
-  color: var(--steel-txt);
-}
-
-.edit-add-card-btn:hover {
-  background: var(--steel-soft);
-}
-
-.edit-trash-btn {
   border: 2px solid var(--danger);
+  border-radius: 0;
   background: var(--paper);
   color: var(--danger);
   opacity: 0.5;
+  cursor: pointer;
 }
 
 .edit-trash-btn.has-selection {
@@ -1758,6 +1832,7 @@ const ui = {
   helpOpen: false,
   editMode: false,
   editSelectedIds: new Set(), // word ids marked (via drag) for bulk delete while editing
+  editHistory: [], // {words, progress} snapshots, most-recent last — reset each time edit mode is entered
   search: {
     query: '',
     scope: 'word-meaning', // 'word-meaning' | 'word' | 'meaning'
@@ -1848,6 +1923,7 @@ function makeNewWordId() {
 // Either way, the view is switched to exactly that category afterward so
 // the blank card is immediately visible and ready to type into.
 function createNewWord() {
+  pushEditHistory();
   const useSpecificCategory = !isSearchActive() && Boolean(ui.activeCategory);
   const category = useSpecificCategory ? ui.activeCategory : NEW_WORD_CATEGORY;
   const id = makeNewWordId();
@@ -1895,6 +1971,48 @@ function cleanupBlankMeanings() {
     }
   }
   if (changed) saveWords(words);
+}
+
+// ---------- edit mode: undo history ----------
+// Snapshots go in before an editing-type change (word/category/meaning text,
+// add/delete meaning, add/delete word, reorder) — never for study-progress
+// changes (memorized/important/checked), which aren't part of editing at
+// all. A continuous run of typing is one step: see the 'input' listener
+// below, which only calls this once per 1.2s-idle burst rather than per
+// keystroke.
+const EDIT_HISTORY_LIMIT = 30;
+
+function pushEditHistory() {
+  ui.editHistory.push({
+    words: JSON.parse(JSON.stringify(words)),
+    progress: JSON.parse(JSON.stringify(progress)),
+  });
+  if (ui.editHistory.length > EDIT_HISTORY_LIMIT) ui.editHistory.shift();
+}
+
+function undoEdit() {
+  if (!ui.editHistory.length) return;
+  const snapshot = ui.editHistory.pop();
+  words = snapshot.words;
+  progress = snapshot.progress;
+  saveWords(words);
+  saveProgress(progress);
+  ui.editSelectedIds = new Set();
+  render();
+}
+
+// Shared by every edit-field's 'input' listener so a burst of keystrokes —
+// even across different fields/rows — collapses into a single undo step.
+// Only the first keystroke after 1.2s of quiet pushes a snapshot; the
+// pending timer just marks "still mid-burst".
+let editHistoryTypingTimer = null;
+
+function noteEditHistoryTyping() {
+  if (editHistoryTypingTimer === null) pushEditHistory();
+  clearTimeout(editHistoryTypingTimer);
+  editHistoryTypingTimer = setTimeout(() => {
+    editHistoryTypingTimer = null;
+  }, 1200);
 }
 
 function getCategories() {
@@ -2181,14 +2299,6 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-const CIRCLED_NUMBERS = [
-  '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
-  '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
-];
-function circledNumber(n) {
-  return CIRCLED_NUMBERS[n - 1] || `(${n})`;
-}
-
 // Every icon in the app renders through this — a single Lucide set (no
 // emoji, no ad-hoc inline SVGs) so the icon language stays consistent.
 // lucide.createIcons() (called at the end of render()) swaps each
@@ -2222,32 +2332,40 @@ function render() {
   // or removes enough page height to toggle the scrollbar on or off.
   const viewportCap = document.documentElement.clientWidth - 24;
 
-  // Card width is always computed to exactly fill the row — no manual
-  // width slider or fit-toggle anymore (see the currentCardWidth note up
-  // top). This solves directly for the card width that makes the cards
-  // fill the target width, using the same chrome terms (#app/feed-panel
-  // padding, main gaps+handle, progress panel) the width is built from
-  // below, so there's no measure-the-rendered-DOM-then-fix-it-up step —
-  // it's correct in one pass.
-  // +4px: measured empirically — the .cards padding/negative-margin trick
-  // (for focus-ring room) resolves a couple px tighter in practice than
-  // the arithmetic here predicts, and without this slack the grid can end
-  // up ~2px wider than its container and trigger a horizontal scrollbar.
-  const nonCardsChrome = 16 * 2 + 16 + progressW + 16 * 2; // feed-panel pad + main gap + progress panel + #app pad
-  const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
-  const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
-  currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
+  if (ui.editMode) {
+    // The edit table wants the full available width (120px/190px/1fr
+    // columns, not a fitted row of N cards), so skip the card-width fit
+    // entirely here — currentCardWidth is simply left stale until the next
+    // non-edit render recomputes it.
+    app.style.width = viewportCap + 'px';
+  } else {
+    // Card width is always computed to exactly fill the row — no manual
+    // width slider or fit-toggle anymore (see the currentCardWidth note up
+    // top). This solves directly for the card width that makes the cards
+    // fill the target width, using the same chrome terms (#app/feed-panel
+    // padding, main gaps+handle, progress panel) the width is built from
+    // below, so there's no measure-the-rendered-DOM-then-fix-it-up step —
+    // it's correct in one pass.
+    // +4px: measured empirically — the .cards padding/negative-margin trick
+    // (for focus-ring room) resolves a couple px tighter in practice than
+    // the arithmetic here predicts, and without this slack the grid can end
+    // up ~2px wider than its container and trigger a horizontal scrollbar.
+    const nonCardsChrome = 16 * 2 + 16 + progressW + 16 * 2; // feed-panel pad + main gap + progress panel + #app pad
+    const availableForCards = Math.max(0, viewportCap - nonCardsChrome);
+    const rawCardWidth = Math.floor((availableForCards - (settings.cols - 1) * CARD_GAP - 4) / settings.cols);
+    currentCardWidth = Math.max(CARD_MIN_WIDTH, rawCardWidth);
 
-  // #app is sized to exactly wrap the now-computed cards, capped at the
-  // viewport so it never forces page-level horizontal scroll, and centered
-  // via margin:auto. Setting an explicit width here (rather than relying
-  // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
-  // quirks that didn't reliably propagate the card grid's width up through
-  // .main / .feed-nav in testing — with a definite width the grid's own
-  // tracks size normally.
-  const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
-  const appWidth = cardsWidth + nonCardsChrome;
-  app.style.width = Math.min(appWidth, viewportCap) + 'px';
+    // #app is sized to exactly wrap the now-computed cards, capped at the
+    // viewport so it never forces page-level horizontal scroll, and centered
+    // via margin:auto. Setting an explicit width here (rather than relying
+    // on CSS `fit-content`) also sidesteps nested-grid intrinsic-sizing
+    // quirks that didn't reliably propagate the card grid's width up through
+    // .main / .feed-nav in testing — with a definite width the grid's own
+    // tracks size normally.
+    const cardsWidth = settings.cols * currentCardWidth + (settings.cols - 1) * CARD_GAP + 4;
+    const appWidth = cardsWidth + nonCardsChrome;
+    app.style.width = Math.min(appWidth, viewportCap) + 'px';
+  }
   app.innerHTML =
     renderMobileTopBar() +
     renderToolbar() +
@@ -2510,6 +2628,7 @@ function renderToolbar() {
         모드
         <select data-action="select-mode">${modeOptionsHtml}</select>
       </label>
+      <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
       ${stepperControl('열', settings.cols, 'cols-dec', 'cols-inc')}
       ${stepperControl('개수', settings.count, 'count-dec', 'count-inc')}
       <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">편집 모드</button>
@@ -2554,20 +2673,33 @@ function renderFeedPanel(filtered, windowWords) {
 
   const paginationBar = renderPaginationBar(filtered.length);
 
+  // Edit mode swaps the card grid for the editable table (see
+  // renderEditableRow) — search/filter/pagination all still feed the same
+  // windowWords either way, so they apply to the table exactly like they do
+  // to the feed.
+  const feedBodyHtml = ui.editMode
+    ? `<div class="edit-table">${cardsHtml || emptyStateHtml}</div>
+       <button class="edit-add-word-btn" data-action="edit-add-word">${icon('plus', 16)} 단어 추가</button>`
+    : `<div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${currentCardWidth}px);">${
+        cardsHtml || emptyStateHtml
+      }</div>`;
+
+  const headerRightHtml = ui.editMode
+    ? `<span class="current-category-label">${windowWords.length} / ${filtered.length}개 편집 중</span>
+       <button class="btn" data-action="undo-edit" ${ui.editHistory.length ? '' : 'disabled'}>${icon(
+        'undo-2',
+        15
+      )} 되돌리기</button>
+       <button class="edit-trash-btn ${
+         ui.editSelectedIds.size ? 'has-selection' : ''
+       }" data-action="edit-bulk-delete" aria-label="선택한 단어 삭제">${icon('trash-2', 16)}</button>`
+    : `<span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>`;
+
   return `
   <section class="feed-panel">
     <div class="feed-header-row">
       <div class="feed-header">단어장 피드</div>
-      <button class="chip-btn ${ui.shuffleActive ? 'active' : ''}" data-action="toggle-shuffle">무작위</button>
-      <span class="current-category-label">${escapeHtml(currentCategoryLabel)}</span>
-      ${
-        ui.editMode
-          ? `<button class="edit-add-card-btn" data-action="edit-add-word" aria-label="단어 추가">+</button>
-             <button class="edit-trash-btn ${
-               ui.editSelectedIds.size ? 'has-selection' : ''
-             }" data-action="edit-bulk-delete" aria-label="선택한 단어 삭제">🗑</button>`
-          : ''
-      }
+      ${headerRightHtml}
       ${renderSearchBar()}
     </div>
     <div class="position-indicator">${positionText}</div>
@@ -2575,9 +2707,7 @@ function renderFeedPanel(filtered, windowWords) {
       ${renderJumpBox(filtered.length)}
       ${paginationBar}
     </div>
-    <div class="cards" style="grid-template-columns: repeat(${settings.cols}, ${currentCardWidth}px);">${
-    cardsHtml || emptyStateHtml
-  }</div>
+    ${feedBodyHtml}
     <div class="feed-nav-row">
       ${paginationBar}
     </div>
@@ -2662,7 +2792,7 @@ function renderPaginationBar(filteredLen) {
 
 function renderCard(word, index, focused) {
   const p = progress[word.id] || defaultProgressFor(word);
-  if (ui.editMode) return renderEditableCard(word, p, index, focused);
+  if (ui.editMode) return renderEditableRow(word, p, index);
 
   const revealed = ui.revealedIds.has(word.id) || settings.mode === 'memorize';
 
@@ -2717,20 +2847,25 @@ function renderCard(word, index, focused) {
   </div>`;
 }
 
-// Edit mode swaps the whole card for plain inputs/textareas instead of
-// static text — see the 'focusout' handler for how edits get committed
-// (on leaving a field, not per keystroke: re-rendering mid-edit would tear
-// out the very field being typed into, the same class of bug the search
-// box's IME composition had). A word with no meanings yet still gets one
-// blank editable row so there's somewhere to type a first one.
-function renderEditableCard(word, p, index, focused) {
+// Edit mode replaces the card grid with a plain table: one row per word
+// (분류 | 표제어 | 뜻 전체 전시), inputs instead of static text — see the
+// 'focusout' handler for how edits get committed (on leaving a field, not
+// per keystroke: re-rendering mid-edit would tear out the very field being
+// typed into, the same class of bug the search box's IME composition had).
+// A word with no meanings yet still gets one blank editable row so there's
+// somewhere to type a first one.
+function renderEditableRow(word, p, index) {
   const selected = ui.editSelectedIds.has(word.id);
   const meanings = word.meanings.length ? word.meanings : [{ meaning: '', example: '' }];
   const meaningsHtml = meanings
     .map(
       (m, i) => `
-      <div class="edit-meaning-row">
-        <span class="edit-meaning-index">${circledNumber(i + 1)}</span>
+      <div class="edit-meaning-row" data-id="${escapeHtml(word.id)}" data-index="${i}">
+        <span class="edit-meaning-grip" draggable="true" aria-label="드래그하여 순서 변경">${icon(
+          'grip-vertical',
+          15
+        )}</span>
+        <span class="edit-meaning-index">${i + 1}</span>
         <div class="edit-meaning-fields">
           <textarea class="edit-field edit-meaning-input" rows="1" data-action="edit-meaning" data-id="${escapeHtml(
             word.id
@@ -2739,24 +2874,32 @@ function renderEditableCard(word, p, index, focused) {
             word.id
           )}" data-index="${i}" placeholder="예시 (선택)">${escapeHtml(m.example)}</textarea>
         </div>
+        <button class="edit-meaning-delete" data-action="edit-delete-meaning" data-id="${escapeHtml(
+          word.id
+        )}" data-index="${i}" aria-label="뜻 삭제">${icon('minus', 15)}</button>
       </div>`
     )
     .join('');
 
   return `
-  <div class="word-card editable ${focused ? 'focused' : ''} ${selected ? 'edit-selected' : ''} ${
-    p.memorized ? 'memorized' : ''
-  }" data-id="${escapeHtml(word.id)}" data-index="${index}">
-    <button class="card-edit-delete" data-action="edit-delete-word" data-id="${escapeHtml(
+  <div class="edit-row ${selected ? 'edit-selected' : ''}" data-id="${escapeHtml(word.id)}" data-index="${index}">
+    <textarea class="edit-field edit-inline-field edit-category-input" rows="1" data-action="edit-category" data-id="${escapeHtml(
       word.id
-    )}" aria-label="단어 삭제">×</button>
-    <textarea class="edit-field edit-word-input" rows="1" data-action="edit-word" data-id="${escapeHtml(
-      word.id
-    )}" placeholder="표제어">${escapeHtml(word.word)}</textarea>
-    <div class="edit-meanings">${meaningsHtml}</div>
-    <button class="edit-add-meaning-btn" data-action="edit-add-meaning" data-id="${escapeHtml(
-      word.id
-    )}">+ 새 뜻 추가</button>
+    )}" placeholder="분류">${escapeHtml(word.category)}</textarea>
+    <div class="edit-row-word">
+      <textarea class="edit-field edit-inline-field edit-word-input" rows="1" data-action="edit-word" data-id="${escapeHtml(
+        word.id
+      )}" placeholder="표제어">${escapeHtml(word.word)}</textarea>
+      <button class="edit-word-delete-btn" data-action="edit-delete-word" data-id="${escapeHtml(
+        word.id
+      )}" aria-label="단어 삭제">${icon('trash-2', 15)}</button>
+    </div>
+    <div class="edit-row-meanings">
+      ${meaningsHtml}
+      <button class="edit-add-meaning-btn" data-action="edit-add-meaning" data-id="${escapeHtml(
+        word.id
+      )}">+ 뜻 추가</button>
+    </div>
   </div>`;
 }
 
@@ -3210,7 +3353,14 @@ document.getElementById('app').addEventListener('click', (e) => {
     ui.editMode = !ui.editMode;
     ui.editSelectedIds = new Set();
     ui.focusedIndex = null;
+    if (ui.editMode) ui.editHistory = []; // fresh undo stack each time edit mode is entered
     render();
+    return;
+  }
+
+  const undoEditBtn = e.target.closest('[data-action="undo-edit"]');
+  if (undoEditBtn) {
+    undoEdit();
     return;
   }
 
@@ -3219,6 +3369,7 @@ document.getElementById('app').addEventListener('click', (e) => {
     const id = editAddMeaningBtn.getAttribute('data-id');
     const w = words.find((x) => x.id === id);
     if (w) {
+      pushEditHistory();
       w.meanings.push({ meaning: '', example: '' });
       saveWords(words);
       render();
@@ -3231,11 +3382,29 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  const editDeleteMeaningBtn = e.target.closest('[data-action="edit-delete-meaning"]');
+  if (editDeleteMeaningBtn) {
+    const id = editDeleteMeaningBtn.getAttribute('data-id');
+    const index = Number(editDeleteMeaningBtn.getAttribute('data-index'));
+    const w = words.find((x) => x.id === id);
+    if (w && w.meanings[index]) {
+      pushEditHistory();
+      w.meanings.splice(index, 1);
+      const p = progress[id];
+      if (p && Array.isArray(p.checked)) p.checked.splice(index, 1);
+      saveWords(words);
+      saveProgress(progress);
+      render();
+    }
+    return;
+  }
+
   const editDeleteWordBtn = e.target.closest('[data-action="edit-delete-word"]');
   if (editDeleteWordBtn) {
     const id = editDeleteWordBtn.getAttribute('data-id');
     const w = words.find((x) => x.id === id);
     if (w && confirm(`"${w.word || '(빈 단어)'}" 단어를 삭제하시겠습니까?`)) {
+      pushEditHistory();
       words = words.filter((x) => x.id !== id);
       delete progress[id];
       ui.editSelectedIds.delete(id);
@@ -3256,6 +3425,7 @@ document.getElementById('app').addEventListener('click', (e) => {
   if (editBulkDeleteBtn) {
     if (ui.editSelectedIds.size === 0) return;
     if (confirm(`선택한 ${ui.editSelectedIds.size}개 단어를 삭제하시겠습니까?`)) {
+      pushEditHistory();
       words = words.filter((w) => !ui.editSelectedIds.has(w.id));
       for (const id of ui.editSelectedIds) delete progress[id];
       ui.editSelectedIds = new Set();
@@ -3524,6 +3694,7 @@ document.getElementById('app').addEventListener('input', (e) => {
   const el = e.target;
   if (!el.classList || !el.classList.contains('edit-field')) return;
   autoResizeField(el);
+  noteEditHistoryTyping();
 });
 
 // ---------- edit mode: commit field edits on blur, not per keystroke ----------
@@ -3539,6 +3710,15 @@ document.getElementById('app').addEventListener('input', (e) => {
 document.getElementById('app').addEventListener('focusout', (e) => {
   const target = e.target;
   if (!target.classList) return;
+
+  if (target.classList.contains('edit-category-input')) {
+    const w = words.find((x) => x.id === target.getAttribute('data-id'));
+    if (w) {
+      w.category = target.value.trim() || '미분류';
+      saveWords(words);
+    }
+    return;
+  }
 
   if (target.classList.contains('edit-word-input')) {
     const w = words.find((x) => x.id === target.getAttribute('data-id'));
@@ -3724,7 +3904,7 @@ document.getElementById('app').addEventListener('focusout', (e) => {
   let touchedIds = null;
 
   function isInteractiveTarget(el) {
-    return Boolean(el.closest('input, textarea, button, select, a'));
+    return Boolean(el.closest('input, textarea, button, select, a, .edit-meaning-grip'));
   }
 
   function toggleSelected(id) {
@@ -3736,7 +3916,7 @@ document.getElementById('app').addEventListener('focusout', (e) => {
   appEl.addEventListener('pointerdown', (e) => {
     if (!ui.editMode) return;
     if (isInteractiveTarget(e.target)) return;
-    const card = e.target.closest('.word-card.editable');
+    const card = e.target.closest('.edit-row');
     if (!card) return;
     dragging = true;
     touchedIds = new Set([card.getAttribute('data-id')]);
@@ -3746,7 +3926,7 @@ document.getElementById('app').addEventListener('focusout', (e) => {
   appEl.addEventListener('pointermove', (e) => {
     if (!dragging) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    const card = el && el.closest('.word-card.editable');
+    const card = el && el.closest('.edit-row');
     if (!card) return;
     const id = card.getAttribute('data-id');
     if (touchedIds.has(id)) return; // already toggled once during this drag
@@ -3760,6 +3940,88 @@ document.getElementById('app').addEventListener('focusout', (e) => {
   }
   appEl.addEventListener('pointerup', endDrag);
   appEl.addEventListener('pointercancel', endDrag);
+})();
+
+// ---------- edit mode: drag a meaning's grip to reorder within its word ----------
+// Native HTML5 drag-and-drop, scoped to mouse/pointer devices (touch has no
+// equivalent here — reordering on mobile just isn't supported). Only the
+// grip is draggable (not the whole row), so dragging inside the textareas
+// still just selects text as normal. setDragImage swaps in the whole row so
+// what visibly moves is the row, not the small grip icon.
+(function setupMeaningDrag() {
+  const appEl = document.getElementById('app');
+  let dragState = null; // { id, fromIndex }
+
+  function clearDropMarkers() {
+    document.querySelectorAll('.edit-meaning-row.drop-before, .edit-meaning-row.drop-after').forEach((r) => {
+      r.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
+  appEl.addEventListener('dragstart', (e) => {
+    const grip = e.target.closest('.edit-meaning-grip');
+    if (!grip) return;
+    const row = grip.closest('.edit-meaning-row');
+    if (!row) return;
+    dragState = { id: row.getAttribute('data-id'), fromIndex: Number(row.getAttribute('data-index')) };
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setDragImage(row, 20, 20);
+    } catch (err) {
+      // ignore — cosmetic only, reordering still works without it
+    }
+  });
+
+  appEl.addEventListener('dragover', (e) => {
+    if (!dragState) return;
+    const row = e.target.closest('.edit-meaning-row');
+    if (!row || row.getAttribute('data-id') !== dragState.id) return;
+    e.preventDefault();
+    clearDropMarkers();
+    const rect = row.getBoundingClientRect();
+    const before = e.clientY - rect.top < rect.height / 2;
+    row.classList.add(before ? 'drop-before' : 'drop-after');
+  });
+
+  appEl.addEventListener('drop', (e) => {
+    if (!dragState) return;
+    const row = e.target.closest('.edit-meaning-row');
+    clearDropMarkers();
+    const { id, fromIndex } = dragState;
+    dragState = null;
+    if (!row || row.getAttribute('data-id') !== id) return;
+    e.preventDefault();
+    const overIndex = Number(row.getAttribute('data-index'));
+    const rect = row.getBoundingClientRect();
+    const before = e.clientY - rect.top < rect.height / 2;
+    let toIndex = before ? overIndex : overIndex + 1;
+    if (toIndex === fromIndex || toIndex === fromIndex + 1) return; // dropped back where it started
+
+    const w = words.find((x) => x.id === id);
+    if (!w) return;
+    pushEditHistory();
+    const [movedMeaning] = w.meanings.splice(fromIndex, 1);
+    if (toIndex > fromIndex) toIndex -= 1; // the splice above shifted everything after fromIndex left by one
+    w.meanings.splice(toIndex, 0, movedMeaning);
+
+    // checked state (and thus each meaning's numbering) rides along with it
+    const p = progress[id];
+    if (p && Array.isArray(p.checked)) {
+      const [movedChecked] = p.checked.splice(fromIndex, 1);
+      p.checked.splice(toIndex, 0, movedChecked);
+    }
+
+    saveWords(words);
+    saveProgress(progress);
+    render();
+  });
+
+  appEl.addEventListener('dragend', () => {
+    dragState = null;
+    document.querySelectorAll('.edit-meaning-row.dragging').forEach((r) => r.classList.remove('dragging'));
+    clearDropMarkers();
+  });
 })();
 
 // ---------- keyboard shortcuts ----------

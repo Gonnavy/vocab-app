@@ -461,36 +461,24 @@ svg.lucide {
   box-shadow: inset 0 0 0 1px var(--steel);
 }
 
-/* ---------- edit mode ---------- */
+/* ---------- edit mode: table (분류 | 표제어 | 뜻) instead of the card grid ---------- */
 
-.word-card.editable {
-  position: relative;
-  cursor: default;
-  gap: 10px;
+.edit-table {
+  display: flex;
+  flex-direction: column;
 }
 
-.word-card.edit-selected {
+.edit-row {
+  display: grid;
+  grid-template-columns: 120px 190px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.edit-row.edit-selected {
   box-shadow: inset 0 0 0 2px var(--danger);
-  background: var(--danger-soft);
-}
-
-.card-edit-delete {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border: 2px solid var(--danger);
-  border-radius: 0;
-  background: var(--paper);
-  color: var(--danger);
-  font-size: 1em;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 1;
-}
-
-.card-edit-delete:hover {
   background: var(--danger-soft);
 }
 
@@ -513,14 +501,50 @@ svg.lucide {
   resize: none;
 }
 
-.edit-word-input {
-  font-size: 1.3em;
-  font-weight: 800;
-  text-align: center;
-  padding-right: 34px;
+/* 분류/표제어: no border until focused, just an underline — README's
+   "포커스 시 밑줄만 스틸로" */
+.edit-inline-field {
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 4px 2px;
+  background: transparent;
 }
 
-.edit-meanings {
+.edit-inline-field:focus {
+  outline: none;
+  border-bottom-color: var(--steel);
+}
+
+.edit-word-input {
+  font-size: 1.15em;
+  font-weight: 700;
+}
+
+.edit-row-word {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-word-delete-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.edit-word-delete-btn:hover {
+  color: var(--danger);
+}
+
+.edit-row-meanings {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -530,11 +554,39 @@ svg.lucide {
   display: flex;
   gap: 6px;
   align-items: flex-start;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+.edit-meaning-row.dragging {
+  opacity: 0.4;
+}
+
+.edit-meaning-row.drop-before {
+  border-top-color: var(--steel);
+}
+
+.edit-meaning-row.drop-after {
+  border-bottom-color: var(--steel);
+}
+
+.edit-meaning-grip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-top: 6px;
+  color: var(--muted);
+  cursor: grab;
+}
+
+.edit-meaning-grip:active {
+  cursor: grabbing;
 }
 
 .edit-meaning-index {
   flex: 0 0 auto;
   padding-top: 8px;
+  font-family: var(--font-heading);
   color: var(--muted);
 }
 
@@ -551,9 +603,24 @@ svg.lucide {
   color: var(--muted);
 }
 
+.edit-meaning-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-top: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.edit-meaning-delete:hover {
+  color: var(--danger);
+}
+
 .edit-add-meaning-btn {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
   margin-top: 4px;
   border: 1px dashed var(--rule);
   border-radius: 0;
@@ -570,32 +637,39 @@ svg.lucide {
   color: var(--steel-txt);
 }
 
-.edit-add-card-btn,
+.edit-add-word-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: none;
+  border-radius: 0;
+  background: var(--steel);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-add-word-btn:hover {
+  opacity: 0.9;
+}
+
 .edit-trash-btn {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 0;
-  cursor: pointer;
-  font-size: 1em;
-  line-height: 1;
-}
-
-.edit-add-card-btn {
-  border: 2px solid var(--steel);
-  background: var(--paper);
-  color: var(--steel-txt);
-}
-
-.edit-add-card-btn:hover {
-  background: var(--steel-soft);
-}
-
-.edit-trash-btn {
   border: 2px solid var(--danger);
+  border-radius: 0;
   background: var(--paper);
   color: var(--danger);
   opacity: 0.5;
+  cursor: pointer;
 }
 
 .edit-trash-btn.has-selection {
