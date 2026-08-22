@@ -1155,6 +1155,7 @@ function renderToolbar() {
     settings.darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'
   }">${icon(settings.darkMode ? 'sun' : 'moon', 16)}</button>
       </div>
+      <div class="toolbar-divider" aria-hidden="true"></div>
       <div class="toolbar-group toolbar-group-right">
         ${renderDeviceToggleButton('chip-btn icon-toggle-btn', true)}
         <button class="chip-btn ${ui.editMode ? 'active' : ''}" data-action="toggle-edit-mode">${icon(
@@ -1211,7 +1212,7 @@ function renderViewOptionsRow() {
 function stepperControl(label, value, decAction, incAction, iconName) {
   const labelHtml = iconName ? icon(iconName, 15) : label;
   return `
-      <label class="opt" ${iconName ? `title="${label}" aria-label="${label}"` : ''}>
+      <label class="opt stepper-field" ${iconName ? `title="${label}" aria-label="${label}"` : ''}>
         ${labelHtml}
         <span class="stepper">
           <button data-action="${decAction}" aria-label="${label} 줄이기">−</button>
