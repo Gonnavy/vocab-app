@@ -310,7 +310,19 @@ function computeForecast() {
   return counts;
 }
 
+// Cleared at the top of every render() — several panels (progress panel,
+// mobile top bar, mobile sheet) all want the same numbers within one pass,
+// and recomputing is O(words × categories), which is real work on a
+// multi-thousand-word list.
+let statsCache = null;
+
 function computeStats() {
+  if (statsCache) return statsCache;
+  statsCache = computeStatsUncached();
+  return statsCache;
+}
+
+function computeStatsUncached() {
   const total = words.length;
   const memorized = words.filter(isMemorized).length;
   const unmemorized = total - memorized;
@@ -634,9 +646,11 @@ function icon(name, size) {
 }
 
 function render() {
+  statsCache = null; // stats are recomputed once per render, then shared
   document.body.classList.toggle('dark', settings.darkMode);
-  document.body.classList.toggle('force-mobile', settings.device === 'mobile');
-  document.body.classList.toggle('force-pc', settings.device === 'pc');
+  // Single switch every mobile CSS rule keys off — covers both the real
+  // viewport and the manual override (see isMobileLayout).
+  document.body.classList.toggle('is-mobile', isMobileLayout());
 
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
 
@@ -661,10 +675,12 @@ function render() {
 
   app.innerHTML =
     renderMobileTopBar() +
+    renderMobileProgressStrips() +
     renderToolbar() +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
+    (ui.session || ui.editMode ? '' : renderMobileBottomBar(filtered.length)) +
     renderMobileDrawer() +
     (ui.exportOpen ? renderExportPanel() : '') +
     (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
@@ -712,13 +728,54 @@ function renderDeviceToggleButton(extraClass, showLabel) {
   )}${showLabel ? ' ' + label : ''}</button>`;
 }
 
+// Mobile chrome. The search row is NOT here — on mobile the feed's own
+// header row doubles as "검색 줄 + 범위 라벨", so there's one search input
+// in the DOM rather than a third copy.
 function renderMobileTopBar() {
+  const stats = computeStats();
   return `
   <div class="mobile-topbar">
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
     <span class="mobile-topbar-title">단어장</span>
-    ${renderSearchBar()}
+    <span class="mobile-word-count">${words.length} WORDS</span>
+    <span class="mobile-progress-num">${stats.memoRate}<span class="unit">%</span></span>
     ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+  </div>`;
+}
+
+// The same two 20-cell bars the progress panel shows, surfaced directly
+// under the mobile top bar (thinner: 14px / 6px).
+function renderMobileProgressStrips() {
+  const stats = computeStats();
+  const cells = (filled) =>
+    Array.from({ length: 20 }, (_, i) => `<div class="bar-cell ${i < filled ? 'filled' : ''}"></div>`).join('');
+  return `
+  <div class="mobile-strips">
+    <div class="bar-20 mobile-memo-strip" aria-label="암기율 ${stats.memoRate}%">${cells(stats.memoBarFilled)}</div>
+    <div class="bar-20 mobile-important-strip" aria-label="중요 표시 ${stats.importantRate}%">${cells(
+    stats.importantBarFilled
+  )}</div>
+  </div>`;
+}
+
+// Fixed bar at the bottom of the mobile viewport: mode segment + paging.
+// Paging here is prev/next only — the numbered pagination stays in the feed
+// body; this is the thumb-reachable copy.
+function renderMobileBottomBar(filteredLen) {
+  const totalPages = Math.max(1, Math.ceil(filteredLen / settings.count));
+  const currentPage = Math.min(totalPages, currentPageNumber());
+  return `
+  <div class="mobile-bottom-bar">
+    ${renderModeSegment()}
+    <div class="mobile-page-nav">
+      <button class="mobile-page-btn" data-action="page-prev" ${
+        currentPage <= 1 ? 'disabled' : ''
+      } aria-label="이전 페이지">${icon('chevron-left', 15)}</button>
+      <span class="mobile-page-label">${currentPage} / ${totalPages}</span>
+      <button class="mobile-page-btn" data-action="page-next" ${
+        currentPage >= totalPages ? 'disabled' : ''
+      } aria-label="다음 페이지">${icon('chevron-right', 15)}</button>
+    </div>
   </div>`;
 }
 
@@ -935,10 +992,15 @@ function renderMobileProgressView() {
       진행률
       <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
     </div>
-    <button class="drawer-settings-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
+    <div class="sheet-quick-actions">
+      <button class="chip-btn icon-toggle-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
     'graduation-cap',
-    17
+    16
   )} 오늘 복습 ${dueTodayCount}</button>
+      <button class="chip-btn icon-toggle-btn ${
+        ui.shuffleActive ? 'active' : ''
+      }" data-action="toggle-shuffle">${icon('shuffle', 16)} 무작위</button>
+    </div>
     ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
@@ -1308,8 +1370,17 @@ function renderCard(word, index, focused) {
     'search',
     14
   )}</a></span>`;
+  // The leading square is a real button, not decoration: on mobile it IS the
+  // memorize toggle (filled = 암기, outlined = 미암기, 34×44 touch area). On
+  // PC it keeps its documented look — visible only once memorized — and
+  // clicking it is simply a bonus alongside the Space shortcut.
+  const memoToggleHtml = `<button type="button" class="card-memo-toggle${
+    p.memorized ? ' active' : ''
+  }" data-action="toggle-memorized-click" data-id="${escapeHtml(
+    word.id
+  )}" aria-label="암기 표시 전환"><span class="card-memo-square"></span></button>`;
   const wordHtml = wordVisible
-    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}">${memoToggleHtml}<span class="card-word-text">${escapeHtml(
         word.word
       )}</span>${cardIconsHtml}</div>`
     : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
@@ -2099,6 +2170,12 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  const memoToggleBtn = e.target.closest('[data-action="toggle-memorized-click"]');
+  if (memoToggleBtn) {
+    toggleMemorized(memoToggleBtn.getAttribute('data-id'));
+    return;
+  }
+
   const checkBtn = e.target.closest('[data-action="toggle-checked"]');
   if (checkBtn) {
     const id = checkBtn.getAttribute('data-id');
@@ -2639,6 +2716,20 @@ document.getElementById('app').addEventListener('focusout', (e) => {
 })();
 
 // ---------- keyboard shortcuts ----------
+
+// The mobile layout now hangs off a class set during render() rather than a
+// media query, so a viewport change that crosses the breakpoint has to
+// trigger a re-render to keep that class honest. Only re-renders when the
+// answer actually flips — plain resizing within one mode costs nothing.
+(function watchLayoutBreakpoint() {
+  let wasMobile = isMobileLayout();
+  window.addEventListener('resize', () => {
+    const nowMobile = isMobileLayout();
+    if (nowMobile === wasMobile) return;
+    wasMobile = nowMobile;
+    render();
+  });
+})();
 
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {

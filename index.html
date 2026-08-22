@@ -564,16 +564,6 @@ svg.lucide {
   background: var(--steel-fill);
 }
 
-/* 표제어 앞 9px 스틸 사각 — memorized marker, drawn without extra markup */
-.word-card.memorized .card-word-text::before {
-  content: '';
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 7px;
-  background: var(--steel);
-  vertical-align: middle;
-}
 
 .word-card.focused {
   position: relative;
@@ -827,8 +817,29 @@ svg.lucide {
   box-shadow: inset 0 -12px 0 var(--important-underline);
 }
 
-.card-word-spacer {
+/* Leading square = the memorize toggle (see renderCard). PC shows it only
+   once memorized, matching the documented "표제어 앞 9px 스틸 사각"; mobile
+   always shows it and gives it a real touch target. */
+.card-memo-toggle {
   grid-column: 1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.card-memo-square {
+  width: 9px;
+  height: 9px;
+  background: transparent;
+}
+
+.card-memo-toggle.active .card-memo-square {
+  background: var(--steel);
 }
 
 .card-word-text {
@@ -1727,312 +1738,388 @@ svg.lucide {
   }
 }
 
-/* ---------- mobile: phone-scale layout ----------
-   Keyed on orientation (not just width) so rotating the device re-applies
-   the right layout automatically, with no JS involved. Portrait and
-   landscape need separate rules because a landscape phone is WIDE but
-   SHORT — width alone can't tell a landscape phone apart from a small
-   desktop window, so landscape is detected via max-height instead. */
+/* ---------- mobile layout ----------
+   One source of truth, keyed on `body.is-mobile` — set by render() from
+   isMobileLayout(), which already folds together the real viewport
+   (portrait <=560w / landscape <=560h) and the manual PC/모바일 override.
+   Keeping this on a class instead of in @media is what lets the forced
+   choice and the natural breakpoint share the exact same rules, rather
+   than two copies that drift apart (they already had). A resize listener
+   re-renders when the answer flips, so the class never goes stale. */
 
-/* ---------- mobile hamburger nav + drawer (hidden outside mobile) ----------
-   Replaces the old toolbar/progress-panel collapse-to-strip approach on
-   phones: the toolbar and progress panel are fully hidden, and their
-   content is reachable instead through a hamburger button that opens a
-   left-side drawer (progress stats, plus a settings sub-page for what used
-   to live in the toolbar). Desktop/tablet layouts never see these — the
-   trigger/drawer elements are display:none until a mobile breakpoint below
-   turns them on. */
-
-.mobile-topbar {
-  display: none;
-}
+.mobile-topbar,
+.mobile-strips,
+.mobile-bottom-bar,
 .mobile-drawer-backdrop {
   display: none;
 }
 
-@media (orientation: portrait) and (max-width: 560px),
-  (orientation: landscape) and (max-height: 560px) {
-  .toolbar,
-  .progress-panel {
-    display: none !important;
-  }
-
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    background: var(--paper);
-    border: 1px solid var(--rule);
-    border-radius: 0;
-    padding: 8px 10px;
-  }
-  .hamburger-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    color: var(--ink);
-    line-height: 1;
-    cursor: pointer;
-    padding: 2px 6px;
-  }
-  .mobile-topbar-title {
-    font-weight: 700;
-    flex: 0 0 auto;
-  }
-  /* Always-visible escape hatch back to PC — forcing mobile must never be a
-     one-way trap, so this sits in the topbar itself, not buried in a
-     settings sub-page. */
-  .mobile-device-toggle-btn {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--rule);
-    background: var(--paper);
-    color: var(--ink);
-    padding: 5px 7px;
-    cursor: pointer;
-  }
-
-  /* the PC copy of the search bar (feed-header-row) would otherwise still
-     show here too, since .feed-panel itself isn't mobile-hidden — only the
-     mobile-topbar copy belongs on this breakpoint */
-  .feed-header-row .search-bar {
-    display: none;
-  }
-  .mobile-topbar .search-bar {
-    flex: 1;
-    min-width: 0;
-    gap: 4px;
-  }
-  .mobile-topbar .search-scope {
-    flex: 0 0 auto;
-    max-width: 30vw;
-    padding: 4px 3px;
-    font-size: 0.78em;
-  }
-  .mobile-topbar .search-input {
-    flex: 1;
-    min-width: 0;
-    padding: 5px 6px;
-  }
-  .mobile-topbar .search-advanced-btn {
-    padding: 4px 6px;
-  }
-
-  .mobile-drawer-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: color-mix(in srgb, var(--ink) 45%, transparent);
-    z-index: 60;
-  }
-  .mobile-drawer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(300px, 82vw);
-    background: var(--paper);
-    border-right: 1px solid var(--rule);
-    box-shadow: var(--shadow-lg);
-    display: flex;
-    flex-direction: column;
-    padding: 14px;
-    overflow-y: auto;
-    animation: riseIn 0.2s ease-out;
-  }
-  .drawer-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-weight: 700;
-    font-size: 1.1em;
-    margin-bottom: 12px;
-  }
-  .drawer-close-btn,
-  .drawer-back-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    line-height: 1;
-    padding: 2px 4px;
-  }
-  .drawer-settings-btn {
-    margin-top: 14px;
-    padding-top: 14px;
-    border: none;
-    border-top: 1px solid var(--rule);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: transparent;
-    color: var(--ink);
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-    font-size: 1em;
-  }
-  .settings-section {
-    margin-bottom: 16px;
-  }
-  .settings-section-title {
-    font-weight: 700;
-    font-size: 0.85em;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-  .settings-section > * {
-    margin-bottom: 8px;
-  }
-  .opt {
-    font-size: 0.85em;
-  }
-
-  /* no keyboard on touch, so the focus ring has nothing left to serve —
-     tapping a card still sets ui.focusedIndex internally (harmless), this
-     just drops the visual outline it would otherwise draw */
-  .word-card.focused {
-    box-shadow: none;
-    z-index: auto;
-  }
-
-  /* long-press now means "toggle 중요" — without this, the same press also
-     reads as "select this text" to the browser and pops its native
-     selection/callout menu (copy/share/translate/...) right on top of it */
-  .word-card {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
+body.is-mobile .toolbar,
+body.is-mobile .progress-panel {
+  display: none;
 }
 
-@media (orientation: portrait) and (max-width: 560px) {
-  body {
-    font-size: 14px;
-  }
-  #app {
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 8px;
-    gap: 8px;
-  }
-  .feed-panel {
-    border-radius: 0;
-    padding: 10px;
-  }
-  .cards {
-    grid-template-columns: 1fr !important;
-  }
-  .word-card {
-    min-height: auto !important;
-  }
-  .card-word {
-    font-size: 23px;
-  }
+body.is-mobile {
+  font-size: 14px;
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
-  body {
-    font-size: 14px;
-  }
-  #app {
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 8px;
-    gap: 8px;
-  }
-  .main {
-    grid-template-columns: 1fr;
-  }
-  .cards {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  .word-card {
-    min-height: auto !important;
-  }
+body.is-mobile #app {
+  width: 100%;
+  max-width: 100%;
+  /* bottom padding clears the fixed bottom bar */
+  padding: 8px 8px 76px;
+  gap: 8px;
 }
 
-/* ---------- manual PC/모바일 override (toolbar's "toggle-device" button) ----------
-   The responsive layout above is entirely media-query driven, which can't
-   react to a JS setting — so a forced choice needs its own rules, placed
-   after those media queries (both sides use !important, so source order is
-   the tiebreaker) covering the structural switches: toolbar/progress panel
-   vs. the mobile top bar + drawer, and the card grid's column count. Finer
-   mobile-only tweaks (the 14px base font size, card padding, etc.) are NOT
-   duplicated here — this covers layout structure, not every detail. */
-
-body.force-mobile .toolbar,
-body.force-mobile .progress-panel {
-  display: none !important;
+body.is-mobile .main {
+  grid-template-columns: 1fr;
 }
 
-body.force-mobile .mobile-topbar {
-  display: flex !important;
-}
-
-body.force-mobile #app {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-body.force-mobile .cards {
+body.is-mobile .cards {
   grid-template-columns: 1fr !important;
 }
 
-body.force-mobile .feed-header-row .search-bar {
-  display: none !important;
+body.is-mobile .word-card {
+  min-height: auto;
 }
 
-/* The drawer/backdrop's actual display/position/z-index only exist inside
-   the real @media block — forcing mobile at a real desktop width means
-   that query never matches, so without this the hamburger button's click
-   handler ran fine (state flipped, the node was in the DOM) but the drawer
-   stayed display:none the whole time. */
-body.force-mobile .mobile-drawer-backdrop {
-  display: block !important;
-  position: fixed !important;
-  inset: 0 !important;
-  background: color-mix(in srgb, var(--ink) 45%, transparent) !important;
-  z-index: 60 !important;
+body.is-mobile .feed-panel {
+  padding: 0;
 }
 
-body.force-mobile .mobile-drawer {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  bottom: 0 !important;
-  width: min(300px, 82vw) !important;
-  background: var(--paper) !important;
-  border-right: 1px solid var(--rule) !important;
-  box-shadow: var(--shadow-lg) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  padding: 14px !important;
-  overflow-y: auto !important;
+/* A landscape phone is wide enough for two columns even though it's still
+   "mobile" by every other measure. */
+@media (orientation: landscape) {
+  body.is-mobile .cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
-body.force-pc .toolbar {
-  display: block !important;
+/* ---------- top bar ---------- */
+
+body.is-mobile .mobile-topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 2px;
 }
 
-body.force-pc .progress-panel {
-  display: block !important;
+body.is-mobile .mobile-topbar-title {
+  flex: 0 0 auto;
+  font-size: 17px;
+  font-weight: 600;
 }
 
-body.force-pc .mobile-topbar,
-body.force-pc .mobile-drawer-backdrop {
-  display: none !important;
+body.is-mobile .mobile-word-count {
+  flex: 0 0 auto;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+body.is-mobile .mobile-progress-num {
+  margin-left: auto;
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+body.is-mobile .mobile-progress-num .unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+body.is-mobile .hamburger-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Escape hatch back to PC — must stay visible, never buried in a sub-page. */
+body.is-mobile .mobile-device-toggle-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ---------- progress strips ---------- */
+
+body.is-mobile .mobile-strips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+body.is-mobile .mobile-memo-strip {
+  height: 14px;
+}
+
+body.is-mobile .mobile-memo-strip .bar-cell {
+  background: var(--fill);
+}
+
+body.is-mobile .mobile-memo-strip .bar-cell.filled {
+  background: var(--steel);
+}
+
+body.is-mobile .mobile-important-strip {
+  height: 6px;
+}
+
+body.is-mobile .mobile-important-strip .bar-cell {
+  box-shadow: inset 0 0 0 1px var(--fill);
+}
+
+body.is-mobile .mobile-important-strip .bar-cell.filled {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+/* ---------- feed / card touch targets ---------- */
+
+body.is-mobile .card-word {
+  font-size: 23px;
+}
+
+/* The leading square is the memorize toggle here — always visible (filled =
+   암기, 1px outline = 미암기) and given a real 34x44 touch area. */
+body.is-mobile .card-memo-toggle {
+  width: 34px;
+  height: 44px;
+  margin-left: -10px;
+  justify-content: center;
+}
+
+body.is-mobile .card-memo-square {
+  width: 11px;
+  height: 11px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+body.is-mobile .card-memo-toggle.active .card-memo-square {
+  background: var(--steel);
+  box-shadow: none;
+}
+
+body.is-mobile .card-bookmark {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  opacity: 0.45;
+}
+
+body.is-mobile .card-bookmark.active {
+  opacity: 1;
+}
+
+body.is-mobile .meaning-item {
+  min-height: 36px;
+}
+
+/* The feed header row doubles as "검색 줄 + 범위 라벨" on mobile, so the
+   search input it already holds is the only copy needed. */
+body.is-mobile .feed-header-row .search-bar {
+  margin-left: 0;
+  flex: 1 1 auto;
+}
+
+body.is-mobile .search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body.is-mobile .feed-key-hints {
+  display: none;
+}
+
+/* ---------- bottom bar ---------- */
+
+body.is-mobile .mobile-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  padding: 8px 10px;
+}
+
+body.is-mobile .mobile-bottom-bar .mode-segment-btn {
+  height: 40px;
+  padding: 0 14px;
+}
+
+body.is-mobile .mobile-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+body.is-mobile .mobile-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 40px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+body.is-mobile .mobile-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+body.is-mobile .mobile-page-label {
+  min-width: 46px;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- bottom sheet ---------- */
+
+body.is-mobile .mobile-drawer-backdrop {
+  display: flex;
+  align-items: flex-end;
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  z-index: 60;
+}
+
+body.is-mobile .mobile-drawer {
+  width: 100%;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  overflow-y: auto;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 0.2s ease-out;
+}
+
+/* The sheet is a scrolling flex column, so its children are flex items that
+   would otherwise shrink to fit the max-height — collapsing fixed-height,
+   text-less elements like the 20-cell bars to 0. Content scrolls instead. */
+body.is-mobile .mobile-drawer > * {
+  flex-shrink: 0;
+}
+
+body.is-mobile .drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 1.1em;
+  margin-bottom: 12px;
+}
+
+body.is-mobile .drawer-close-btn,
+body.is-mobile .drawer-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+body.is-mobile .sheet-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+body.is-mobile .drawer-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border: none;
+  border-top: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 1em;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.is-mobile .settings-section {
+  margin-bottom: 16px;
+}
+
+body.is-mobile .settings-section-title {
+  margin-bottom: 8px;
+  font-weight: 700;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+body.is-mobile .settings-section > * {
+  margin-bottom: 8px;
+}
+
+body.is-mobile .opt {
+  font-size: 0.85em;
+}
+
+/* No hardware keyboard on touch, so the focus ring has nothing to serve. */
+body.is-mobile .word-card.focused {
+  box-shadow: none;
+  z-index: auto;
+}
+
+/* Long-press means "toggle 중요" — without this the same press also reads as
+   "select this text" and pops the native callout menu on top of it. */
+body.is-mobile .word-card {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 @keyframes riseIn {
@@ -2729,7 +2816,19 @@ function computeForecast() {
   return counts;
 }
 
+// Cleared at the top of every render() — several panels (progress panel,
+// mobile top bar, mobile sheet) all want the same numbers within one pass,
+// and recomputing is O(words × categories), which is real work on a
+// multi-thousand-word list.
+let statsCache = null;
+
 function computeStats() {
+  if (statsCache) return statsCache;
+  statsCache = computeStatsUncached();
+  return statsCache;
+}
+
+function computeStatsUncached() {
   const total = words.length;
   const memorized = words.filter(isMemorized).length;
   const unmemorized = total - memorized;
@@ -3053,9 +3152,11 @@ function icon(name, size) {
 }
 
 function render() {
+  statsCache = null; // stats are recomputed once per render, then shared
   document.body.classList.toggle('dark', settings.darkMode);
-  document.body.classList.toggle('force-mobile', settings.device === 'mobile');
-  document.body.classList.toggle('force-pc', settings.device === 'pc');
+  // Single switch every mobile CSS rule keys off — covers both the real
+  // viewport and the manual override (see isMobileLayout).
+  document.body.classList.toggle('is-mobile', isMobileLayout());
 
   document.documentElement.style.setProperty('--card-font-size', settings.fontSize + 'px');
 
@@ -3080,10 +3181,12 @@ function render() {
 
   app.innerHTML =
     renderMobileTopBar() +
+    renderMobileProgressStrips() +
     renderToolbar() +
     `<div class="main ${ui.session ? 'main-session' : ''}" style="--progress-w: ${progressW}px;">` +
     mainInnerHtml +
     '</div>' +
+    (ui.session || ui.editMode ? '' : renderMobileBottomBar(filtered.length)) +
     renderMobileDrawer() +
     (ui.exportOpen ? renderExportPanel() : '') +
     (ui.search.advancedOpen ? renderAdvancedSearchPanel() : '') +
@@ -3131,13 +3234,54 @@ function renderDeviceToggleButton(extraClass, showLabel) {
   )}${showLabel ? ' ' + label : ''}</button>`;
 }
 
+// Mobile chrome. The search row is NOT here — on mobile the feed's own
+// header row doubles as "검색 줄 + 범위 라벨", so there's one search input
+// in the DOM rather than a third copy.
 function renderMobileTopBar() {
+  const stats = computeStats();
   return `
   <div class="mobile-topbar">
-    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
     <span class="mobile-topbar-title">단어장</span>
-    ${renderSearchBar()}
+    <span class="mobile-word-count">${words.length} WORDS</span>
+    <span class="mobile-progress-num">${stats.memoRate}<span class="unit">%</span></span>
     ${renderDeviceToggleButton('mobile-device-toggle-btn', false)}
+    <button class="hamburger-btn" data-action="open-mobile-drawer" aria-label="메뉴 열기">${icon('menu', 19)}</button>
+  </div>`;
+}
+
+// The same two 20-cell bars the progress panel shows, surfaced directly
+// under the mobile top bar (thinner: 14px / 6px).
+function renderMobileProgressStrips() {
+  const stats = computeStats();
+  const cells = (filled) =>
+    Array.from({ length: 20 }, (_, i) => `<div class="bar-cell ${i < filled ? 'filled' : ''}"></div>`).join('');
+  return `
+  <div class="mobile-strips">
+    <div class="bar-20 mobile-memo-strip" aria-label="암기율 ${stats.memoRate}%">${cells(stats.memoBarFilled)}</div>
+    <div class="bar-20 mobile-important-strip" aria-label="중요 표시 ${stats.importantRate}%">${cells(
+    stats.importantBarFilled
+  )}</div>
+  </div>`;
+}
+
+// Fixed bar at the bottom of the mobile viewport: mode segment + paging.
+// Paging here is prev/next only — the numbered pagination stays in the feed
+// body; this is the thumb-reachable copy.
+function renderMobileBottomBar(filteredLen) {
+  const totalPages = Math.max(1, Math.ceil(filteredLen / settings.count));
+  const currentPage = Math.min(totalPages, currentPageNumber());
+  return `
+  <div class="mobile-bottom-bar">
+    ${renderModeSegment()}
+    <div class="mobile-page-nav">
+      <button class="mobile-page-btn" data-action="page-prev" ${
+        currentPage <= 1 ? 'disabled' : ''
+      } aria-label="이전 페이지">${icon('chevron-left', 15)}</button>
+      <span class="mobile-page-label">${currentPage} / ${totalPages}</span>
+      <button class="mobile-page-btn" data-action="page-next" ${
+        currentPage >= totalPages ? 'disabled' : ''
+      } aria-label="다음 페이지">${icon('chevron-right', 15)}</button>
+    </div>
   </div>`;
 }
 
@@ -3354,10 +3498,15 @@ function renderMobileProgressView() {
       진행률
       <button class="drawer-close-btn" data-action="close-mobile-drawer" aria-label="닫기">${icon('x', 17)}</button>
     </div>
-    <button class="drawer-settings-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
+    <div class="sheet-quick-actions">
+      <button class="chip-btn icon-toggle-btn ${dueTodayCount > 0 ? 'due-active' : ''}" data-action="start-session">${icon(
     'graduation-cap',
-    17
+    16
   )} 오늘 복습 ${dueTodayCount}</button>
+      <button class="chip-btn icon-toggle-btn ${
+        ui.shuffleActive ? 'active' : ''
+      }" data-action="toggle-shuffle">${icon('shuffle', 16)} 무작위</button>
+    </div>
     ${renderProgressBody(stats)}
     <button class="drawer-settings-btn" data-action="open-help">${icon('circle-help', 17)} 사용법</button>
     <button class="drawer-settings-btn" data-action="open-mobile-settings">${icon('settings', 17)} 설정</button>
@@ -3727,8 +3876,17 @@ function renderCard(word, index, focused) {
     'search',
     14
   )}</a></span>`;
+  // The leading square is a real button, not decoration: on mobile it IS the
+  // memorize toggle (filled = 암기, outlined = 미암기, 34×44 touch area). On
+  // PC it keeps its documented look — visible only once memorized — and
+  // clicking it is simply a bonus alongside the Space shortcut.
+  const memoToggleHtml = `<button type="button" class="card-memo-toggle${
+    p.memorized ? ' active' : ''
+  }" data-action="toggle-memorized-click" data-id="${escapeHtml(
+    word.id
+  )}" aria-label="암기 표시 전환"><span class="card-memo-square"></span></button>`;
   const wordHtml = wordVisible
-    ? `<div class="card-word${importantClass}"><span class="card-word-spacer" aria-hidden="true"></span><span class="card-word-text">${escapeHtml(
+    ? `<div class="card-word${importantClass}">${memoToggleHtml}<span class="card-word-text">${escapeHtml(
         word.word
       )}</span>${cardIconsHtml}</div>`
     : `<div class="card-word placeholder${importantClass}">탭하여 단어 보기</div>`;
@@ -4518,6 +4676,12 @@ document.getElementById('app').addEventListener('click', (e) => {
     return;
   }
 
+  const memoToggleBtn = e.target.closest('[data-action="toggle-memorized-click"]');
+  if (memoToggleBtn) {
+    toggleMemorized(memoToggleBtn.getAttribute('data-id'));
+    return;
+  }
+
   const checkBtn = e.target.closest('[data-action="toggle-checked"]');
   if (checkBtn) {
     const id = checkBtn.getAttribute('data-id');
@@ -5058,6 +5222,20 @@ document.getElementById('app').addEventListener('focusout', (e) => {
 })();
 
 // ---------- keyboard shortcuts ----------
+
+// The mobile layout now hangs off a class set during render() rather than a
+// media query, so a viewport change that crosses the breakpoint has to
+// trigger a re-render to keep that class honest. Only re-renders when the
+// answer actually flips — plain resizing within one mode costs nothing.
+(function watchLayoutBreakpoint() {
+  let wasMobile = isMobileLayout();
+  window.addEventListener('resize', () => {
+    const nowMobile = isMobileLayout();
+    if (nowMobile === wasMobile) return;
+    wasMobile = nowMobile;
+    render();
+  });
+})();
 
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
